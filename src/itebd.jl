@@ -1,4 +1,5 @@
 include("./modules/iMPS.jl")
+include("./modules/util.jl")
 
 function doTEBD(
     # Hamiltonian
@@ -13,17 +14,8 @@ function doTEBD(
     seed::Int,
     mpslen::Int=length(originalinds)
 )
-    methodname = "iTEBD"
-    target = "$(modelname)/$(methodname)/mpslen=$(mpslen)/D=$(D)/seed=$(seed)"
-
-    resultdir = "./results/$(target)"
-    snapshotdir = "./snapshots/$(target)"
-    if !isdir(resultdir)
-        mkpath(resultdir)
-    end
-    if !isdir(snapshotdir)
-        mkpath(snapshotdir)
-    end
+    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)"
+    resultdir, snapshotdir = setupDir(target)
     open("$(snapshotdir)/spectrum.dat", "w")
 
     mps = randomInfiniteMPS(target, sitetype, D; mpslen, seed)

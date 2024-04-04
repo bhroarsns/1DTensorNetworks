@@ -2,6 +2,8 @@ using ITensors
 using LinearAlgebra
 using Random
 
+include("util.jl")
+
 mutable struct InfiniteMPS
     length::Int
     target::String
@@ -346,19 +348,10 @@ function takeSnapshot(mps::InfiniteMPS, number::Int)
         if !isdir("./snapshots/$(mps.target)/" * sitename(mps, isite))
             mkpath("./snapshots/$(mps.target)/" * sitename(mps, isite))
         end
-        open("./snapshots/$(mps.target)/" * sitename(mps, isite) * "/$(number).dat", "w") do io
-            st = mps.siteTensors[isite]
-            si = siteInd(mps, isite)
-            bl, br = bondInds(mps, isite)
-            for isi in eachval(si)
-                for ibl in eachval(bl)
-                    for ibr in eachval(br)
-                        entry = st[si=>isi, bl=>ibl, br=>ibr]
-                        println(io, "$(isi), $(ibl), $(ibr), $(real(entry)), $(imag(entry)), $(abs(entry)), $(angle(entry))")
-                    end
-                end
-            end
-        end
+        st = mps.siteTensors[isite]
+        si = siteInd(mps, isite)
+        bl, br = bondInds(mps, isite)
+        snapshot("./snapshots/$(mps.target)/" * sitename(mps, isite) * "/$(number).dat", st, si, bl, br)
     end
     for ibond in 1:mps.length
         if !isdir("./snapshots/$(mps.target)/" * bondname(mps, ibond))
