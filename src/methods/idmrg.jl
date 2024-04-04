@@ -1,5 +1,5 @@
-include("./modules/DMRG.jl")
-include("./modules/util.jl")
+include("../modules/DMRG.jl")
+include("../modules/util.jl")
 
 function doiDMRG(
     # Hamiltonian

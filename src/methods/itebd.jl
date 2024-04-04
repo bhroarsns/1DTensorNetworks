@@ -1,5 +1,5 @@
-include("./modules/iMPS.jl")
-include("./modules/util.jl")
+include("../modules/iMPS.jl")
+include("../modules/util.jl")
 
 function doTEBD(
     # Hamiltonian
