@@ -22,9 +22,12 @@ function doiDMRG(
         mkpath("$(snapshotdir)/eigenvalues")
     end
 
+    print("\r", 2)
+    # plb - UL - nlb nrb - UR - prb
+    #      nls             nrs
     UL, UR, hL, hR, plb, nls, nlb, nrb, nrs, prb, eigs, irreps, gsEnergy = initDMRG(hloc, originalinds, sitetype, D)
     open("$(resultdir)/energy.dat", "w") do io
-        println(io, "2, $(gsEnergy)")
+        println(io, "2, $(gsEnergy/4)")
     end
     snapshot("$(snapshotdir)/left/2.dat", UL, nls, plb, nlb)
     snapshot("$(snapshotdir)/right/2.dat", UR, nrs, prb, nrb)
@@ -35,7 +38,14 @@ function doiDMRG(
     end
 
     for istep in 3:512
-        UL, UR, hL, hR, nlb, nls, nrs, nrb, eigs, irreps, gsEnergy = dmrgStep(
+        print("\r", istep)
+        #  UL - plb plb - UL - nlb nrb - UR - prb prb - UR
+        # pls            nls             nrs            prs
+        pls = nls
+        plb = nlb
+        prb = nrb
+        prs = nrs
+        UL, UR, hL, hR, nls, nlb, nrb, nrs, eigs, irreps, gsEnergy = dmrgStep(
             istep,
             hloc,
             originalinds,
@@ -44,14 +54,14 @@ function doiDMRG(
             UR,
             hL,
             hR,
-            nlb,
-            nls,
-            nrs,
-            nrb,
+            plb,
+            pls,
+            prs,
+            prb,
             D)
 
-        open("$(resultdir)/energy.dat", "w") do io
-            println(io, "$(istep), $(gsEnergy)")
+        open("$(resultdir)/energy.dat", "a") do io
+            println(io, "$(istep), $(gsEnergy/2/istep)")
         end
         snapshot("$(snapshotdir)/left/$(istep).dat", UL, nls, plb, nlb)
         snapshot("$(snapshotdir)/right/$(istep).dat", UR, nrs, prb, nrb)
@@ -61,4 +71,5 @@ function doiDMRG(
             end
         end
     end
+    return nothing
 end

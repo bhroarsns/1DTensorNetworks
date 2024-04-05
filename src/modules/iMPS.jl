@@ -145,17 +145,20 @@ function fixedpoint(mps::InfiniteMPS, tm::ITensor, linkind::Index{Int})
     inds1 = [linkind, linkind']
     inds2 = uniqueinds(tm, inds1)
 
-    D, P, _, _, e = eigen(tm, inds2, inds1)
+    D, P, spec, _, e = eigen(tm, inds2, inds1)
+    eigs = spec.eigs
+    indord = sortperm(eigs; by=eig->abs(eig), rev=true)
     open("./snapshots/" * mps.target * "/spectrum.dat", "a") do io
         for ieig in eachval(e)
-            print(io, real(D[ieig, ieig]), imag(D[ieig, ieig]))
+            ie = indord[ieig]
+            print(io, real(D[ie, ie]), ", ", imag(D[ie, ie]), ", ")
         end
         print(io, "\n")
     end
     maxind = findlast(eig -> eig == maximum(eigs), eigs)
     λ = D[maxind, maxind]
     v = P * onehot(e => maxind)
-    v = (v + swapprime(dag(v), 0, 1)) / 2.0
+    v = real((v + swapprime(dag(v), 0, 1)) / 2.0)
     return v * sign(tr(v)), λ
 end
 

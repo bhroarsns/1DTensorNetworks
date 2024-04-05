@@ -11,17 +11,17 @@ function initDMRG(hloc::ITensor, originalinds::Vector{Index{Int}}, sitetype::Str
     hR = replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nrs, prb, nrs', prb'])
 
     UL, UR, eigs, irreps, nlb, nrb, gsEnergy = getGroundState(
-        replaceinds(hloc, [prime.(originalinds)..., originalinds...], [plb, nls, plb', nls']),
+        2, hL,
         replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nls, nrs, nls', nrs']),
-        replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nrs, prb, nrs', prb']),
-        plb, nls, nrs, prb, maxdim, 2
+        hR,
+        plb, nls, nrs, prb, maxdim
     )
 
     return UL, UR, hL, hR, plb, nls, nlb, nrb, nrs, prb, eigs, irreps, gsEnergy
 end
 
 function getGroundState(
-    step::Int,
+    curstep::Int,
     hL::ITensor,
     hC::ITensor,
     hR::ITensor,
@@ -35,37 +35,35 @@ function getGroundState(
     hEff += δ(plb, plb') * hC * δ(prb, prb')
     hEff += δ(plb, plb') * δ(nls, nls') * hR
 
-    _, U, spec, _, e = eigen(hEff; ishermitian=true, maxdim=1)
-    gsEnergy = spec.eigs[1]
-    vec = U * onehot(e => 1)
+    _, U, spec, _, e = eigen(hEff; ishermitian=true)
+    eigs = spec.eigs
+    minind = findfirst(eig -> eig == minimum(eigs), eigs)
+    gsEnergy = eigs[minind]
+    vec = U * onehot(e => minind)
     UL, _, UR, spec, tl, tr = svd(vec, [plb, nls])
     eigs = spec.eigs
     irreps = Vector{Int}([1])
-    for isv in 2:dim(tl)
-        if eigs[isv - 1] ≈ eigs[isv]
+    for isv in Iterators.drop(eachindex(eigs), 1)
+        if eigs[isv-1] ≈ eigs[isv]
             irreps[end] += 1
         else
             push!(irreps, 1)
         end
     end
-    newdim = reduce((i,j) -> min(maxdim, i+j), irreps)
-    if newdim < maxdim
-        nlb = Index(newdim, "Bond,$(step)-$(step+1)")
-        nrb = Index(newdim, "Bond,$(step)-$(step+1)")
-        UL * δ(tl, nlb)
-        UR * δ(tr, nrb)
-    else
-        nlb = settags(tl, "Bond,$(step)-$(step+1)")
-        nrb = settags(tr, "Bond,$(step)-$(step+1)")
-        UL = replaceind(UL, tl, nlb)
-        UR = replaceind(UL, tr, nrb)
+    newdim = reduce((i, j) -> i + j > maxdim ? i : i + j, irreps)
+    if newdim == 0
+        newdim = maxdim
     end
-
+    nlb = Index(newdim, "Bond,Left,$(curstep)-$(curstep+1)")
+    nrb = Index(newdim, "Bond,Right,$(curstep)-$(curstep+1)")
+    UL = UL * δ(tl, nlb)
+    UR = UR * δ(tr, nrb)
+    irreps = collect(Iterators.flatten(map(num -> ones(Int, num) .* num, irreps)))
     return UL, UR, eigs, irreps, nlb, nrb, gsEnergy
 end
 
 function dmrgStep(
-    step::Int,
+    curstep::Int,
     hloc::ITensor,
     originalinds::Vector{Index{Int}},
     sitetype::String,
@@ -79,8 +77,8 @@ function dmrgStep(
     prb::Index,
     maxdim::Int
 )
-    nls = addtags(siteind(sitetype), "Left,n=$(step)")
-    nrs = addtags(siteind(sitetype), "Right,n=$(step)")
+    nls = addtags(siteind(sitetype), "Left,n=$(curstep)")
+    nrs = addtags(siteind(sitetype), "Right,n=$(curstep)")
 
     hL_new = UL * hL * prime(dag(UL)) * delta(nls, nls')
     hL_new += UL * replaceinds(hloc, [prime.(originalinds)..., originalinds...], [pls, nls, pls', nls']) * replaceinds(dag(UL), [pls, plb], [pls', plb'])
@@ -88,8 +86,8 @@ function dmrgStep(
     hR_new += UR * replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nrs, prs, nrs', prs']) * replaceinds(dag(UR), [prs, prb], [prs', prb'])
     hC_new = replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nls, nrs, nls', nrs'])
 
-    UL_new, UR_new, eigs, irreps, nlb, nrb, gsEnergy = getGroundState(step, hL_new, hC_new, hR_new, plb, nls, nrs, prb, maxdim)
+    UL_new, UR_new, eigs, irreps, nlb, nrb, gsEnergy = getGroundState(curstep, hL_new, hC_new, hR_new, plb, nls, nrs, prb, maxdim)
 
-    return UL_new, UR_new, hL_new, hR_new, nlb, nls, nrs, nrb, eigs, irreps, gsEnergy
+    return UL_new, UR_new, hL_new, hR_new, nls, nlb, nrb, nrs, eigs, irreps, gsEnergy
 end
 

@@ -18,7 +18,7 @@ function doTEBD(
     resultdir, snapshotdir = setupDir(target)
     open("$(snapshotdir)/spectrum.dat", "w")
 
-    mps = randomInfiniteMPS(target, sitetype, D; mpslen, seed)
+    mps = randomInfiniteMPS(target, sitetype, D, mpslen; seed)
     normalize!(mps)
     takeSnapshot(mps, 0)
     β = 0.0
@@ -44,4 +44,6 @@ function doTEBD(
             totsteps += steps
         end
     end
+
+    return nothing
 end

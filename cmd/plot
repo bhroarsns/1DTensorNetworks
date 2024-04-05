@@ -1,0 +1,26 @@
+#! /bin/zsh
+
+parent="./pltfiles/"
+
+pltdirs=(`ls $parent | tr '\n' ' '`)
+select dirnm in $pltdirs
+do
+    dir=$dirnm"/"
+    pltfs=`ls $parent$dir | tr '\n' ' '`
+    pltfarr=(`echo $pltfs`)
+    plta=$pltfs" All"
+    pltarr=(`echo $plta`)
+    select file in $pltarr
+    do
+        if [ ${file} = "All" ]; then
+            for alf in $pltfarr
+            do
+                /opt/homebrew/bin/gnuplot $parent$dir$alf
+            done
+            exit 0
+        else
+            /opt/homebrew/bin/gnuplot $parent$dir$file
+            exit 0
+        fi
+    done
+done
