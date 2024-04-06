@@ -19,4 +19,5 @@ end
 function executeDMRG()
     modelname, hloc, orginds = hamiltonian("S=1/2")
     doiDMRG(modelname, hloc, orginds, "S=1/2", 16)
+    return nothing
 end
