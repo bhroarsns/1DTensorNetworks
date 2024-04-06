@@ -28,10 +28,10 @@ end
 function recordSpecs(mps::InfiniteMPS, lspecs::Vector{Vector{Complex}}, rspecs::Vector{Vector{Complex}}, snapshotdir::String)
     for ibond in eachindex(lspecs)
         open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_left.dat", "a") do io
-            println(io, join(map(λ -> "$(real(λ)), $(imag(λ))", lspecs), ", "))
+            println(io, join(map(λ -> "$(real(λ)), $(imag(λ))", lspecs[ibond]), ", "))
         end
         open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_right.dat", "a") do io
-            println(io, join(map(λ -> "$(real(λ)), $(imag(λ))", rspecs), ", "))
+            println(io, join(map(λ -> "$(real(λ)), $(imag(λ))", rspecs[ibond]), ", "))
         end
     end
 end
@@ -75,8 +75,8 @@ function doTEBD(
             gate = exp(-Δτ * hloc)
             for istep in 1:steps
                 print("\r", istep)
-                lspecs, rspecs = update!(mps, gate, originalinds)
-                normalize!(mps)
+                update!(mps, gate, originalinds)
+                lspecs, rspecs = normalize!(mps)
                 recordSpecs(mps, lspecs, rspecs, snapshotdir)
                 takeSnapshot(mps, snapshotdir, istep)
                 evs = real.(expectedvalues(mps, hloc, originalinds; normalized=true))
