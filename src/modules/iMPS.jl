@@ -6,7 +6,6 @@ include("util.jl")
 
 mutable struct InfiniteMPS
     length::Int
-    target::String
     siteTensors::Vector{ITensor}
     bondWeights::Vector{ITensor}
 end
@@ -52,11 +51,11 @@ function correctTags!(mps::InfiniteMPS)
     end
 end
 
-function InfiniteMPS(target::String, siteTensors::Vector{ITensor}, bondWeights::Vector{ITensor})
+function InfiniteMPS(siteTensors::Vector{ITensor}, bondWeights::Vector{ITensor})
     if length(siteTensors) != length(bondWeights)
         error("Length of siteTensors and bondWeights must be the same.")
     end
-    mps = InfiniteMPS(length(siteTensors), target, siteTensors, bondWeights)
+    mps = InfiniteMPS(length(siteTensors), siteTensors, bondWeights)
     correctTags!(mps)
     return mps
 end
@@ -141,33 +140,26 @@ function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1)
     return El, Er, llink, rlink
 end
 
-function fixedpoint(mps::InfiniteMPS, tm::ITensor, linkind::Index{Int})
+function fixedpoint(tm::ITensor, linkind::Index{Int})
     inds1 = [linkind, linkind']
     inds2 = uniqueinds(tm, inds1)
 
     D, P, spec, _, e = eigen(tm, inds2, inds1)
     eigs = spec.eigs
-    indord = sortperm(eigs; by=eig->abs(eig), rev=true)
-    open("./snapshots/" * mps.target * "/spectrum.dat", "a") do io
-        for ieig in eachval(e)
-            ie = indord[ieig]
-            print(io, real(D[ie, ie]), ", ", imag(D[ie, ie]), ", ")
-        end
-        print(io, "\n")
-    end
-    maxind = findlast(eig -> eig == maximum(eigs), eigs)
-    λ = D[maxind, maxind]
-    v = P * onehot(e => maxind)
+    indord = sortperm(eigs; by=eig -> abs(eig), rev=true)
+    spectrum = map(ie -> D[ie, ie], indord)
+    λ = spectrum[begin]
+    v = P * onehot(e => indord[begin])
     v = real((v + swapprime(dag(v), 0, 1)) / 2.0)
-    return v * sign(tr(v)), λ
+    return v * sign(tr(v)), λ, spectrum
 end
 
 function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1)
     El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2)
-    σ, λl = fixedpoint(mps, El, ll)
-    μ, λr = fixedpoint(mps, Er, lr)
+    σ, λl, lspec = fixedpoint(El, ll)
+    μ, λr, rspec = fixedpoint(Er, lr)
 
-    return σ, μ, ll, lr, (λl + λr) / 2.0
+    return σ, μ, ll, lr, (λl + λr) / 2.0, lspec, rspec
 end
 
 function densitymatrix(mps::InfiniteMPS, dmlen::Int, firstsite::Int; normalized=false)
@@ -231,7 +223,7 @@ end
 
 function canonicalize!(mps::InfiniteMPS, bondnum::Int; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
     mpslen = mps.length
-    σ, μ, ll, lr, λ = environment(mps, bondnum)
+    σ, μ, ll, lr, λ, lspec, rspec = environment(mps, bondnum)
     Dl, Ul, _, el, _ = eigen(σ; ishermitian=true, cutoff=fpcutoff)
     Dr, Ur, _, _, _ = eigen(μ; ishermitian=true, cutoff=fpcutoff)
 
@@ -250,19 +242,24 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; fpcutoff::Float64=0.0, sv
     mps.siteTensors[mod(bondnum, 1:mpslen)] = left
     mps.siteTensors[mod(bondnum + 1, 1:mpslen)] = right
 
-    return λ
+    return λ, lspec, rspec
 end
 
 function canonicalizeAll!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
     λs = Vector{Complex}(undef, mps.length)
+    lspecs = Vector{Vector{Complex}}(undef, mps.length)
+    rspecs = Vector{Vector{Complex}}(undef, mps.length)
     for ibond in eachindex(λs)
-        λs[ibond] = canonicalize!(mps, ibond; fpcutoff, svcutoff)
+        λ, lspec, rspec = canonicalize!(mps, ibond; fpcutoff, svcutoff)
+        λs[ibond] = λ
+        lspecs[ibond] = lspec
+        rspecs[ibond] = rspec
     end
-    return λs
+    return λs, lspecs, rspecs
 end
 
 function normalize!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
-    λs = canonicalizeAll!(mps; fpcutoff, svcutoff)
+    λs, lspecs, rspecs = canonicalizeAll!(mps; fpcutoff, svcutoff)
     divider = sqrt(sum(abs.(λs)) / length(λs))
     for ibond in eachindex(mps.bondWeights)
         bwnorm = norm(mps.bondWeights[ibond])
@@ -274,7 +271,7 @@ function normalize!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0
     for isite in eachindex(mps.siteTensors)
         mps.siteTensors[isite] /= divider
     end
-    return nothing
+    return lspecs, rspecs
 end
 
 function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
@@ -318,11 +315,11 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     return nothing
 end
 
-function randomInfiniteMPS(target::String, sitetype, bonddim::Int, mpslen::Int=2; seed::Union{Int,Nothing}=nothing)
-    return randomInfiniteMPS(target, sitetype, ones(Int, mpslen) .* bonddim; seed)
+function randomInfiniteMPS(sitetype::String, bonddim::Int, mpslen::Int=2; seed::Union{Int,Nothing}=nothing)
+    return randomInfiniteMPS(sitetype, ones(Int, mpslen) .* bonddim; seed)
 end
 
-function randomInfiniteMPS(target::String, sitetype, bonddims::Vector{Int}; seed::Union{Int,Nothing}=nothing)
+function randomInfiniteMPS(sitetype::String, bonddims::Vector{Int}; seed::Union{Int,Nothing}=nothing)
     mpslen = length(bonddims)
     siteTensors = Vector{ITensor}(undef, mpslen)
     bondWeights = Vector{ITensor}(undef, mpslen)
@@ -343,31 +340,7 @@ function randomInfiniteMPS(target::String, sitetype, bonddims::Vector{Int}; seed
         si = siteind(sitetype)
         siteTensors[isite] = randomITensor(bondindsr[isite == 1 ? mpslen : isite - 1], si, bondindsl[isite])
     end
-    return InfiniteMPS(target, siteTensors, bondWeights)
-end
-
-function takeSnapshot(mps::InfiniteMPS, number::Int)
-    for isite in 1:mps.length
-        if !isdir("./snapshots/$(mps.target)/" * sitename(mps, isite))
-            mkpath("./snapshots/$(mps.target)/" * sitename(mps, isite))
-        end
-        st = mps.siteTensors[isite]
-        si = siteInd(mps, isite)
-        bl, br = bondInds(mps, isite)
-        snapshot("./snapshots/$(mps.target)/" * sitename(mps, isite) * "/$(number).dat", st, si, bl, br)
-    end
-    for ibond in 1:mps.length
-        if !isdir("./snapshots/$(mps.target)/" * bondname(mps, ibond))
-            mkpath("./snapshots/$(mps.target)/" * bondname(mps, ibond))
-        end
-        open("./snapshots/$(mps.target)/" * bondname(mps, ibond) * "/$(number).dat", "w") do io
-            bl, _, bw = bond(mps, ibond)
-            for ibl in eachval(bl)
-                entry = bw[ibl, ibl]
-                println(io, "$(ibl), $(entry)")
-            end
-        end
-    end
+    return InfiniteMPS(siteTensors, bondWeights)
 end
 
 
