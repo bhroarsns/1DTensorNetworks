@@ -8,14 +8,10 @@ function initDMRG(hloc::ITensor, originalinds::Vector{Index{Int}}, sitetype::Str
     prb = addtags(siteind(sitetype), "Right,n=1")
 
     hL = replaceinds(hloc, [prime.(originalinds)..., originalinds...], [plb, nls, plb', nls'])
+    hC = replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nls, nrs, nls', nrs'])
     hR = replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nrs, prb, nrs', prb'])
 
-    UL, UR, eigs, irreps, nlb, nrb, gsEnergy = getGroundState(
-        2, hL,
-        replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nls, nrs, nls', nrs']),
-        hR,
-        plb, nls, nrs, prb, maxdim
-    )
+    UL, UR, eigs, irreps, nlb, nrb, gsEnergy = getGroundState(2, hL, hC, hR, plb, nls, nrs, prb, maxdim)
 
     return UL, UR, hL, hR, plb, nls, nlb, nrb, nrs, prb, eigs, irreps, gsEnergy
 end
@@ -90,4 +86,3 @@ function dmrgStep(
 
     return UL_new, UR_new, hL_new, hR_new, nls, nlb, nrb, nrs, eigs, irreps, gsEnergy
 end
-

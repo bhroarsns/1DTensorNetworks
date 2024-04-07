@@ -1,0 +1,27 @@
+#! /bin/zsh
+
+parent="./plots/"
+dirs="$(ls -p $parent | grep /$ | tr '\n' ' ')"
+while [ -n "$dirs" ]
+do
+    echo $parent
+    dirarr=(`echo $dirs" parent"`)
+    if [ ${#dirarr[@]} = 2 ]; then
+        dirnm=${dirarr[1]}
+        parent="$parent$dirnm"
+        dirs="$(ls -p $parent | grep /$ | tr '\n' ' ')"
+        continue
+    fi
+    select dirnm in $dirarr
+    do
+        if [ ${dirnm} = "parent" ]; then
+            break 2
+        else
+            parent="$parent$dirnm"
+            dirs="$(ls -p $parent | grep /$ | tr '\n' ' ')"
+            continue 2
+        fi
+    done
+done
+open $parent
+exit 0
