@@ -1,6 +1,20 @@
 include("../modules/DMRG.jl")
 include("../modules/util.jl")
 
+function logEigs(snapshotdir::String, curstep::Int, eigs::Vector{Float64}, irreps::Vector{Int})
+    open("$(snapshotdir)/eigenvalues/$(curstep).dat", "w") do io
+        for ieig in eachindex(eigs)
+            println(io, "$(ieig), $(eigs[ieig]), $(irreps[ieig])")
+        end
+    end
+end
+
+function outputResult(resultdir::String, curstep::Int, gsEnergy::Float64, initialize=false)
+    open("$(resultdir)/energy.dat", initialize ? "w" : "a") do io
+        println(io, "$(curstep), $(gsEnergy/2/curstep)")
+    end
+end
+
 function doiDMRG(
     # Hamiltonian
     modelname::String,
@@ -8,7 +22,8 @@ function doiDMRG(
     originalinds::Vector{Index{Int}},
     sitetype::String,
     # DMRG parameters
-    D::Int,
+    D::Int;
+    singlesite::Union{ITensor,Nothing}=nothing
 )
     target = "$(modelname)/iDMRG/D=$(D)"
     resultdir, snapshotdir = setupDir(target)
@@ -23,53 +38,23 @@ function doiDMRG(
     end
 
     print("\r", 2)
-    # plb - UL - nlb nrb - UR - prb
-    #      nls             nrs
-    UL, UR, hL, hR, plb, nls, nlb, nrb, nrs, prb, eigs, irreps, gsEnergy = initDMRG(hloc, originalinds, sitetype, D)
-    open("$(resultdir)/energy.dat", "w") do io
-        println(io, "2, $(gsEnergy/4)")
-    end
-    snapshot("$(snapshotdir)/left/2.dat", UL, nls, plb, nlb)
-    snapshot("$(snapshotdir)/right/2.dat", UR, nrs, prb, nrb)
-    open("$(snapshotdir)/eigenvalues/2.dat", "w") do io
-        for ieig in eachindex(eigs)
-            println(io, "$(ieig), $(eigs[ieig]), $(irreps[ieig])")
-        end
-    end
+    UL, UR, hL, hR, pleftbond, nleftsite, nleftbond, nrightbond, nrightsite, prightbond, eigs, irreps, gsEnergy = initDMRG(sitetype, hloc, originalinds, D; singlesite)
+    outputResult(resultdir, 2, gsEnergy, true)
+    snapshot("$(snapshotdir)/left/2.dat", UL, nleftsite, pleftbond, nleftbond)
+    snapshot("$(snapshotdir)/right/2.dat", UR, nrightsite, prightbond, nrightbond)
+    logEigs(snapshotdir, 2, eigs, irreps)
 
     for istep in 3:512
         print("\r", istep)
-        #  UL - plb plb - UL - nlb nrb - UR - prb prb - UR
-        # pls            nls             nrs            prs
-        pls = nls
-        plb = nlb
-        prb = nrb
-        prs = nrs
-        UL, UR, hL, hR, nls, nlb, nrb, nrs, eigs, irreps, gsEnergy = dmrgStep(
-            istep,
-            hloc,
-            originalinds,
-            sitetype,
-            UL,
-            UR,
-            hL,
-            hR,
-            plb,
-            pls,
-            prs,
-            prb,
-            D)
-
-        open("$(resultdir)/energy.dat", "a") do io
-            println(io, "$(istep), $(gsEnergy/2/istep)")
-        end
-        snapshot("$(snapshotdir)/left/$(istep).dat", UL, nls, plb, nlb)
-        snapshot("$(snapshotdir)/right/$(istep).dat", UR, nrs, prb, nrb)
-        open("$(snapshotdir)/eigenvalues/$(istep).dat", "w") do io
-            for ieig in eachindex(eigs)
-                println(io, "$(ieig), $(eigs[ieig]), $(irreps[ieig])")
-            end
-        end
+        pleftsite = nleftsite
+        pleftbond = nleftbond
+        prightbond = nrightbond
+        prightsite = nrightsite
+        UL, UR, hL, hR, nleftsite, nleftbond, nrightbond, nrightsite, eigs, irreps, gsEnergy = dmrgStep(istep, sitetype, hloc, originalinds, UL, UR, hL, hR, pleftbond, pleftsite, prightsite, prightbond, D; singlesite)
+        outputResult(resultdir, istep, gsEnergy)
+        snapshot("$(snapshotdir)/left/$(istep).dat", UL, nleftsite, pleftbond, nleftbond)
+        snapshot("$(snapshotdir)/right/$(istep).dat", UR, nrightsite, prightbond, nrightbond)
+        logEigs(snapshotdir, istep, eigs, irreps)
     end
     return nothing
 end

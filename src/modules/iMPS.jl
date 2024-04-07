@@ -282,10 +282,19 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     end
 
     firstsite = mod(firstsite, 1:mpslen)
+
     lastsite = firstsite + gatelen - 1
 
     minket, lbw, rbw, lbl, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
     ketinds = uniqueinds(minket, lbw, rbw)
+
+    # single site gate evolution do not require lbwinv / rbwinv
+    if gatelen == 1
+        Θ = mps.siteTensors[firstsite] * replaceind(gate, prime(originalinds[begin]), ketinds[begin])
+        mps.siteTensors[firstsite] = replaceind(Θ, originalinds[begin], ketinds[begin])
+        return nothing
+    end
+
     tmp = sim(lbl)
     lbwinv = replaceind(inv.(lbw), lbl, tmp)
     rbwinv = inv.(rbw)

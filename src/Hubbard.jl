@@ -14,22 +14,23 @@ function hamiltonian(;U::Float64, μ::Float64=-U/2.0)
     hloc += op("c†↓ * F↑", i) * op("c↓", j) * -1.0
     hloc += op("c↑ * F↓", i) * op("c†↑", j) * -1.0
     hloc += op("c↓ * F↑", i) * op("c†↓", j) * -1.0
-    hloc += δ(j, j') * op("n↑ * n↓", i) * U / 2.0
-    hloc += δ(i, i') * op("n↑ * n↓", j) * U / 2.0
-    hloc += δ(j, j') * op("ntot", i) * -μ / 2.0
-    hloc += δ(i, i') * op("ntot", j) * -μ / 2.0
+    singlesite = nothing
+    if U != 0.0
+        singlesite = op("n↑ * n↓", i) * U
+        singlesite += op("ntot", i) * -μ
+    end
     orginds = [i, j]
-    return modelname, hloc, orginds
+    return modelname, hloc, orginds, singlesite
 end
 
 function executeTEBD(;U::Float64, μ::Float64=-U/2.0)
-    modelname, hloc, orginds = hamiltonian(;U, μ)
-    doTEBD(modelname, hloc, orginds, "Electron", [(0.1, 500)], 32, 10)
+    modelname, hloc, orginds, singlesite = hamiltonian(;U, μ)
+    doiTEBD(modelname, hloc, orginds, "Electron", [(0.1, 500)], 32, 10; singlesite)
     return nothing
 end
 
 function executeDMRG(;U::Float64, μ::Float64=-U/2.0)
-    modelname, hloc, orginds = hamiltonian(;U, μ)
-    doiDMRG(modelname, hloc, orginds, "Electron", 16)
+    modelname, hloc, orginds, singlesite = hamiltonian(;U, μ)
+    doiDMRG(modelname, hloc, orginds, "Electron", 16; singlesite)
     return nothing
 end

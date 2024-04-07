@@ -36,7 +36,7 @@ function recordSpecs(mps::InfiniteMPS, lspecs::Vector{Vector{Complex}}, rspecs::
     end
 end
 
-function doTEBD(
+function doiTEBD(
     # Hamiltonian
     modelname::String,
     hloc::ITensor,
@@ -46,8 +46,9 @@ function doTEBD(
     Δτs::Vector{Tuple{Float64,Int}},
     # MPS parameters
     D::Int,
-    seed::Int,
-    mpslen::Int=length(originalinds)
+    seed::Int;
+    mpslen::Int=length(originalinds);
+    singlesite::Union{ITensor,Nothing}=nothing,
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)"
     resultdir, snapshotdir = setupDir(target)
@@ -76,6 +77,9 @@ function doTEBD(
             for istep in 1:steps
                 print("\r", istep)
                 update!(mps, gate, originalinds)
+                if !isnothing(singlesite)
+                    update!(mps, singlesite, originalinds[begin])
+                end
                 lspecs, rspecs = normalize!(mps)
                 recordSpecs(mps, lspecs, rspecs, snapshotdir)
                 takeSnapshot(mps, snapshotdir, istep)

@@ -12,7 +12,7 @@ end
 
 function executeTEBD()
     modelname, hloc, orginds = hamiltonian("S=1/2")
-    doTEBD(modelname, hloc, orginds, "S=1/2", [(0.1, 500)], 16, 10)
+    doiTEBD(modelname, hloc, orginds, "S=1/2", [(0.1, 500)], 16, 10)
     return nothing
 end
 
