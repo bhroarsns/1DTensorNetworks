@@ -4,18 +4,14 @@ using Printf
 
 function takeSnapshot(mps::InfiniteMPS, snapshotdir::String, number::Int)
     for isite in 1:mps.length
-        if !isdir("./$(snapshotdir)/" * sitename(mps, isite))
-            mkpath("./$(snapshotdir)/" * sitename(mps, isite))
-        end
+        mkpathINE("./$(snapshotdir)/" * sitename(mps, isite))
         st = mps.siteTensors[isite]
         si = siteInd(mps, isite)
         bl, br = bondInds(mps, isite)
         snapshot("./$(snapshotdir)/" * sitename(mps, isite) * "/$(number).dat", st, si, bl, br)
     end
     for ibond in 1:mps.length
-        if !isdir("./$(snapshotdir)/" * bondname(mps, ibond))
-            mkpath("./$(snapshotdir)/" * bondname(mps, ibond))
-        end
+        mkpathINE("./$(snapshotdir)/" * bondname(mps, ibond))
         open("./$(snapshotdir)/" * bondname(mps, ibond) * "/$(number).dat", "w") do io
             bl, _, bw = bond(mps, ibond)
             for ibl in eachval(bl)
@@ -86,28 +82,25 @@ function doiTEBD(
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)"
     resultdir, snapshotdir = setupDir(target)
-    if !isdir("./$(snapshotdir)/spectrum")
-        mkpath("./$(snapshotdir)/spectrum")
-    end
-    if !isdir("./$(snapshotdir)/error")
-        mkpath("./$(snapshotdir)/error")
-    end
-
-    mps = randomInfiniteMPS(sitetype, D, mpslen; seed)
+    mkpathINE("./$(snapshotdir)/spectrum")
+    mkpathINE("./$(snapshotdir)/error")
     open("$(resultdir)/energy.dat", "w") do io
         println(io, "# D=$(D), seed=$(seed)")
     end
+    
+    β = 0.0
+    totsteps = 0
+    mps = randomInfiniteMPS(sitetype, D, mpslen; seed)
     for ibond in 1:mpslen
         open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_left.dat", "w")
         open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_right.dat", "w")
         open("./$(snapshotdir)/error/$(bondname(mps, ibond)).dat", "w")
     end
     lspecs, rspecs, errs = normalize!(mps)
+    
     recordSpecs(mps, lspecs, rspecs, snapshotdir)
     recordErrs(mps, errs, snapshotdir)
     takeSnapshot(mps, snapshotdir, 0)
-    β = 0.0
-    totsteps = 0
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
 
     for (Δτ, steps) in Δτs
@@ -116,11 +109,12 @@ function doiTEBD(
         for istep in 1:steps
             print("\r", istep)
             errUs = update!(mps, gate, originalinds)
-            lspecs, rspecs, errs = normalize!(mps)
             if !isnothing(sgate)
+                lspecs, rspecs, errs = normalize!(mps)
                 update!(mps, sgate, [originalinds[begin]])
             end
             lspecs, rspecs, errs = normalize!(mps)
+
             recordSpecs(mps, lspecs, rspecs, snapshotdir)
             recordErrs(mps, errs, snapshotdir, errUs)
             takeSnapshot(mps, snapshotdir, istep)

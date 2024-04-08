@@ -1,22 +1,18 @@
 using ITensors
 
+function mkpathINE(path::String)
+    if !isdir(path)
+        mkpath(path)
+    end
+end
+
 function setupDir(target::String)
     resultdir = "./results/$(target)"
     snapshotdir = "./snapshots/$(target)"
-    texdir = "./tex/$(target)"
-    plotdir = "./plots/$(target)"
-    if !isdir(resultdir)
-        mkpath(resultdir)
-    end
-    if !isdir(snapshotdir)
-        mkpath(snapshotdir)
-    end
-    if !isdir(texdir)
-        mkpath(texdir)
-    end
-    if !isdir(plotdir)
-        mkpath(plotdir)
-    end
+    mkpathINE(resultdir)
+    mkpathINE(snapshotdir)
+    mkpathINE("./tex/$(target)")
+    mkpathINE("./plots/$(target)")
     return resultdir, snapshotdir
 end
 

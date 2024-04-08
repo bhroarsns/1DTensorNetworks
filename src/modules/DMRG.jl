@@ -15,57 +15,55 @@ function getGroundState(hL::ITensor, hC::ITensor, hR::ITensor, his::Vector{Index
     return vec, gsEnergy
 end
 
-function countIrreps(eigs::Vector{Float64}, maxdim::Int)
-    irreps = Vector{Int}([1])
+function countDegeneracy(eigs::Vector{Float64}, maxdim::Int)
+    degen = Vector{Int}([1])
     for isv in Iterators.drop(eachindex(eigs), 1)
         if eigs[isv-1] ≈ eigs[isv]
-            irreps[end] += 1
+            degen[end] += 1
         else
-            push!(irreps, 1)
+            push!(degen, 1)
         end
     end
-    newdim = reduce((i, j) -> i + j > maxdim ? i : i + j, irreps)
-    if newdim == 0
-        newdim = maxdim
-    end
-    irreps = collect(Iterators.flatten(map(num -> ones(Int, num) .* num, irreps)))
-    return irreps, newdim
+    accdegen = filter(dim -> dim ≤ maxdim , accumulate(+, degen))
+    newdim = isempty(accdegen) ? maxdim : last(accdegen)
+    degen = collect(Iterators.flatten(map(num -> ones(Int, num) .* num, degen)))
+    return degen, newdim
 end
 
 function diagonalizeRDM(curstep::Int, vec::ITensor, leftinds::Vector{Index{Int}}, maxdim::Int)
     UL, _, UR, spec, tmpl, tmpr = svd(vec, leftinds)
-    irreps, newdim = countIrreps(spec.eigs, maxdim)
-    nleftbond = Index(newdim, "Bond,Left,$(curstep)-$(curstep+1)")
-    nrightbond = Index(newdim, "Bond,Right,$(curstep)-$(curstep+1)")
+    degen, newdim = countDegeneracy(spec.eigs, maxdim)
+    nlb = Index(newdim, "Bond,Left,$(curstep)-$(curstep+1)")
+    nrb = Index(newdim, "Bond,Right,$(curstep)-$(curstep+1)")
     # truncation
-    UL = UL * δ(tmpl, nleftbond)
-    UR = UR * δ(tmpr, nrightbond)
-    return UL, UR, spec.eigs, irreps, nleftbond, nrightbond
+    UL = UL * δ(tmpl, nlb)
+    UR = UR * δ(tmpr, nrb)
+    return UL, UR, spec.eigs, degen, nlb, nrb
 end
 
 function initDMRG(sitetype::String, hloc::ITensor, originalinds::Vector{Index{Int}}, maxdim::Int64; singlesite::Union{ITensor,Nothing}=nothing)
-    pleftbond = addtags(siteind(sitetype, 1), "Left")
-    nleftsite = addtags(siteind(sitetype, 2), "Left")
-    nrightsite = addtags(siteind(sitetype, 2), "Right")
-    prightbond = addtags(siteind(sitetype, 1), "Right")
+    plb = addtags(siteind(sitetype, 1), "Left")
+    nls = addtags(siteind(sitetype, 2), "Left")
+    nrs = addtags(siteind(sitetype, 2), "Right")
+    prb = addtags(siteind(sitetype, 1), "Right")
 
     hlocinds = [prime.(originalinds)..., originalinds...]
-    hL = replaceinds(hloc, hlocinds, [pleftbond, nleftsite, pleftbond', nleftsite'])
-    hC = replaceinds(hloc, hlocinds, [nleftsite, nrightsite, nleftsite', nrightsite'])
-    hR = replaceinds(hloc, hlocinds, [nrightsite, prightbond, nrightsite', prightbond'])
+    hL = replaceinds(hloc, hlocinds, [plb, nls, plb', nls'])
+    hC = replaceinds(hloc, hlocinds, [nls, nrs, nls', nrs'])
+    hR = replaceinds(hloc, hlocinds, [nrs, prb, nrs', prb'])
 
     if !isnothing(singlesite)
         orgind1 = originalinds[begin]
-        hL += replaceinds(singlesite, [prime(orgind1), orgind1], [pleftbond, pleftbond']) * δ(nleftsite, nleftsite')
-        hL += δ(pleftbond, pleftbond') * replaceinds(singlesite, [prime(orgind1), orgind1], [nleftsite, nleftsite'])
-        hR += replaceinds(singlesite, [prime(orgind1), orgind1], [nrightsite, nrightsite']) * δ(prightbond, prightbond')
-        hR += δ(nrightsite, nrightsite') * replaceinds(singlesite, [prime(orgind1), orgind1], [prightbond, prightbond'])
+        hL += replaceinds(singlesite, [prime(orgind1), orgind1], [plb, plb']) * δ(nls, nls')
+        hL += δ(plb, plb') * replaceinds(singlesite, [prime(orgind1), orgind1], [nls, nls'])
+        hR += replaceinds(singlesite, [prime(orgind1), orgind1], [nrs, nrs']) * δ(prb, prb')
+        hR += δ(nrs, nrs') * replaceinds(singlesite, [prime(orgind1), orgind1], [prb, prb'])
     end
 
-    vec, gsEnergy = getGroundState(hL, hC, hR, [pleftbond, nleftsite, nrightsite, prightbond])
-    UL, UR, eigs, irreps, nleftbond, nrightbond = diagonalizeRDM(2, vec, [pleftbond, nleftsite], maxdim)
+    vec, gsEnergy = getGroundState(hL, hC, hR, [plb, nls, nrs, prb])
+    UL, UR, eigs, degen, nlb, nrb = diagonalizeRDM(2, vec, [plb, nls], maxdim)
 
-    return UL, UR, hL, hR, pleftbond, nleftsite, nleftbond, nrightbond, nrightsite, prightbond, eigs, irreps, gsEnergy
+    return UL, UR, hL, hR, plb, nls, nlb, nrb, nrs, prb, eigs, degen, gsEnergy
 end
 
 function dmrgStep(
@@ -77,21 +75,21 @@ function dmrgStep(
     UR::ITensor,
     hL::ITensor,
     hR::ITensor,
-    pleftbond::Index,
-    pleftsite::Index,
-    prightsite::Index,
-    prightbond::Index,
+    plb::Index,
+    pls::Index,
+    prs::Index,
+    prb::Index,
     maxdim::Int;
     singlesite::Union{ITensor,Nothing}=nothing
 )
-    hL_new, nleftsite = getNewBlock(curstep, sitetype, hloc, originalinds, false, hL, UL, pleftsite, pleftbond; singlesite)
-    hR_new, nrightsite = getNewBlock(curstep, sitetype, hloc, originalinds, true, hR, UR, prightsite, prightbond; singlesite)
-    hC_new = replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nleftsite, nrightsite, nleftsite', nrightsite'])
+    hL_new, nls = getNewBlock(curstep, sitetype, hloc, originalinds, false, hL, UL, pls, plb; singlesite)
+    hR_new, nrs = getNewBlock(curstep, sitetype, hloc, originalinds, true, hR, UR, prs, prb; singlesite)
+    hC_new = replaceinds(hloc, [prime.(originalinds)..., originalinds...], [nls, nrs, nls', nrs'])
 
-    vec, gsEnergy = getGroundState(hL_new, hC_new, hR_new, [pleftbond, nleftsite, nrightsite, prightbond])
-    UL_new, UR_new, eigs, irreps, nleftbond, nrightbond = diagonalizeRDM(curstep, vec, [pleftbond, nleftsite], maxdim)
+    vec, gsEnergy = getGroundState(hL_new, hC_new, hR_new, [plb, nls, nrs, prb])
+    UL_new, UR_new, eigs, degen, nlb, nrb = diagonalizeRDM(curstep, vec, [plb, nls], maxdim)
 
-    return UL_new, UR_new, hL_new, hR_new, nleftsite, nleftbond, nrightbond, nrightsite, eigs, irreps, gsEnergy
+    return UL_new, UR_new, hL_new, hR_new, nls, nlb, nrb, nrs, eigs, degen, gsEnergy
 end
 
 function getNewBlock(
