@@ -1,7 +1,7 @@
 include("./methods/itebd.jl")
 include("./methods/idmrg.jl")
 
-function hamiltonian(;U::Float64, μ::Float64=-U/2.0)
+function hamiltonian(; U::Float64, μ::Float64=U / 2.0)
     modelname = "Hubbard/U=$(U)"
     i = addtags(siteind("Electron"), "i")
     j = addtags(siteind("Electron"), "j")
@@ -14,23 +14,39 @@ function hamiltonian(;U::Float64, μ::Float64=-U/2.0)
     hloc += op("c†↓ * F↑", i) * op("c↓", j) * -1.0
     hloc += op("c↑ * F↓", i) * op("c†↑", j) * -1.0
     hloc += op("c↓ * F↑", i) * op("c†↓", j) * -1.0
+    hbond = hloc
     singlesite = nothing
     if U != 0.0
         singlesite = op("n↑ * n↓", i) * U
         singlesite += op("ntot", i) * -μ
+        hbond += singlesite * δ(j, j') * 0.5
+        hbond += δ(i, i') * replaceinds(singlesite, [i, i'], [j, j']) * 0.5
     end
     orginds = [i, j]
-    return modelname, hloc, orginds, singlesite
+    return modelname, hloc, orginds, singlesite, hbond
 end
 
-function executeTEBD(;U::Float64, μ::Float64=-U/2.0)
-    modelname, hloc, orginds, singlesite = hamiltonian(;U, μ)
-    doiTEBD(modelname, hloc, orginds, "Electron", [(0.1, 500)], 32, 10; singlesite)
+function executeTEBD(; U::Float64, μ::Float64=U / 2.0)
+    modelname, hloc, orginds, singlesite, hbond = hamiltonian(; U, μ)
+    doiTEBD(
+        modelname,
+        hloc,
+        orginds,
+        "Electron",
+        [(0.1, 500)],
+        16,
+        10;
+        singlesite,
+        obs=[
+            (op("ntot", orginds[begin]), [orginds[begin]]),
+            (op("n↑", orginds[begin]), [orginds[begin]]),
+            (op("n↓", orginds[begin]), [orginds[begin]]),
+        ])
     return nothing
 end
 
-function executeDMRG(;U::Float64, μ::Float64=-U/2.0)
-    modelname, hloc, orginds, singlesite = hamiltonian(;U, μ)
-    doiDMRG(modelname, hloc, orginds, "Electron", 16; singlesite)
+function executeDMRG(; U::Float64, μ::Float64=U / 2.0)
+    modelname, hloc, orginds, singlesite = hamiltonian(; U, μ)
+    doiDMRG(modelname, hloc, orginds, "Electron", 8; singlesite)
     return nothing
 end

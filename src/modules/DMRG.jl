@@ -56,10 +56,10 @@ function initDMRG(sitetype::String, hloc::ITensor, originalinds::Vector{Index{In
 
     if !isnothing(singlesite)
         orgind1 = originalinds[begin]
-        hL += replaceinds(singlesite, [prime(orgind1), orgind1], [pleftbond, pleftbond'])
-        hL += replaceinds(singlesite, [prime(orgind1), orgind1], [nleftsite, nleftsite'])
-        hR += replaceinds(singlesite, [prime(orgind1), orgind1], [nrightsite, nrightsite'])
-        hR += replaceinds(singlesite, [prime(orgind1), orgind1], [prightbond, prightbond'])
+        hL += replaceinds(singlesite, [prime(orgind1), orgind1], [pleftbond, pleftbond']) * δ(nleftsite, nleftsite')
+        hL += δ(pleftbond, pleftbond') * replaceinds(singlesite, [prime(orgind1), orgind1], [nleftsite, nleftsite'])
+        hR += replaceinds(singlesite, [prime(orgind1), orgind1], [nrightsite, nrightsite']) * δ(prightbond, prightbond')
+        hR += δ(nrightsite, nrightsite') * replaceinds(singlesite, [prime(orgind1), orgind1], [prightbond, prightbond'])
     end
 
     vec, gsEnergy = getGroundState(hL, hC, hR, [pleftbond, nleftsite, nrightsite, prightbond])

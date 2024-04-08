@@ -150,16 +150,18 @@ function fixedpoint(tm::ITensor, linkind::Index{Int})
     spectrum = map(ie -> D[ie, ie], indord)
     λ = spectrum[begin]
     v = P * onehot(e => indord[begin])
+    errH = norm((v - swapprime(dag(v), 0, 1)) / 2.0)
+    errR = norm(imag(v))
     v = real((v + swapprime(dag(v), 0, 1)) / 2.0)
-    return v * sign(tr(v)), λ, spectrum
+    return v * sign(tr(v)), λ, spectrum, errH, errR
 end
 
 function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1)
     El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2)
-    σ, λl, lspec = fixedpoint(El, ll)
-    μ, λr, rspec = fixedpoint(Er, lr)
+    σ, λl, lspec, errHl, errRl = fixedpoint(El, ll)
+    μ, λr, rspec, errHr, errRr = fixedpoint(Er, lr)
 
-    return σ, μ, ll, lr, (λl + λr) / 2.0, lspec, rspec
+    return σ, μ, ll, lr, (λl + λr) / 2.0, lspec, rspec, errHl, errHr, errRl, errRr
 end
 
 function densitymatrix(mps::InfiniteMPS, dmlen::Int, firstsite::Int; normalized=false)
@@ -223,15 +225,18 @@ end
 
 function canonicalize!(mps::InfiniteMPS, bondnum::Int; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
     mpslen = mps.length
-    σ, μ, ll, lr, λ, lspec, rspec = environment(mps, bondnum)
+    σ, μ, ll, lr, λ, lspec, rspec, errHl, errHr, errRl, errRr = environment(mps, bondnum)
     Dl, Ul, _, el, _ = eigen(σ; ishermitian=true, cutoff=fpcutoff)
     Dr, Ur, _, _, _ = eigen(μ; ishermitian=true, cutoff=fpcutoff)
+    errσ = norm(σ - dag(Ul) * Dl * prime(Ul))
+    errμ = norm(μ - dag(Ur) * Dr * prime(Ur))
 
     bl, br, bw = bond(mps, bondnum)
     bn = bondname(mps, bondnum)
 
     Θ = sqrt.(Dl) * dag(Ul) * replaceinds(bw, [bl, br], [ll, lr]) * dag(Ur) * sqrt.(Dr)
     U, Σ, V = svd(Θ, el; cutoff=svcutoff, lefttags="Bond,$(bn),$(bn[1])", righttags="Bond,$(bn),$(bn[2])")
+    errΘ = norm(Θ - U * Σ * V)
 
     X = Ul * inv.(sqrt.(Dl)) * U
     Y = V * inv.(sqrt.(Dr)) * Ur
@@ -242,24 +247,26 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; fpcutoff::Float64=0.0, sv
     mps.siteTensors[mod(bondnum, 1:mpslen)] = left
     mps.siteTensors[mod(bondnum + 1, 1:mpslen)] = right
 
-    return λ, lspec, rspec
+    return λ, lspec, rspec, errHl, errHr, errRl, errRr, errσ, errμ, errΘ
 end
 
 function canonicalizeAll!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
     λs = Vector{Complex}(undef, mps.length)
     lspecs = Vector{Vector{Complex}}(undef, mps.length)
     rspecs = Vector{Vector{Complex}}(undef, mps.length)
+    errs = Vector{Vector{Float64}}(undef, mps.length)
     for ibond in eachindex(λs)
-        λ, lspec, rspec = canonicalize!(mps, ibond; fpcutoff, svcutoff)
+        λ, lspec, rspec, errHl, errHr, errRl, errRr, errσ, errμ, errΘ = canonicalize!(mps, ibond; fpcutoff, svcutoff)
         λs[ibond] = λ
         lspecs[ibond] = lspec
         rspecs[ibond] = rspec
+        errs[ibond] = [errHl, errHr, errRl, errRr, errσ, errμ, errΘ]
     end
-    return λs, lspecs, rspecs
+    return λs, lspecs, rspecs, errs
 end
 
 function normalize!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
-    λs, lspecs, rspecs = canonicalizeAll!(mps; fpcutoff, svcutoff)
+    λs, lspecs, rspecs, errs = canonicalizeAll!(mps; fpcutoff, svcutoff)
     divider = sqrt(sum(abs.(λs)) / length(λs))
     for ibond in eachindex(mps.bondWeights)
         bwnorm = norm(mps.bondWeights[ibond])
@@ -271,7 +278,7 @@ function normalize!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0
     for isite in eachindex(mps.siteTensors)
         mps.siteTensors[isite] /= divider
     end
-    return lspecs, rspecs
+    return lspecs, rspecs, errs
 end
 
 function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
@@ -282,24 +289,23 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     end
 
     firstsite = mod(firstsite, 1:mpslen)
-
-    lastsite = firstsite + gatelen - 1
-
-    minket, lbw, rbw, lbl, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
-    ketinds = uniqueinds(minket, lbw, rbw)
-
     # single site gate evolution do not require lbwinv / rbwinv
     if gatelen == 1
-        Θ = mps.siteTensors[firstsite] * replaceind(gate, prime(originalinds[begin]), ketinds[begin])
-        mps.siteTensors[firstsite] = replaceind(Θ, originalinds[begin], ketinds[begin])
-        return nothing
+        Θ = mps.siteTensors[firstsite] * replaceind(gate, prime(originalinds[begin]), siteInd(mps, firstsite))
+        mps.siteTensors[firstsite] = replaceind(Θ, originalinds[begin], siteInd(mps, firstsite))
+        return 0.0
     end
+
+    lastsite = firstsite + gatelen - 1
+    minket, lbw, rbw, lbl, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
+    ketinds = uniqueinds(minket, lbw, rbw)
 
     tmp = sim(lbl)
     lbwinv = replaceind(inv.(lbw), lbl, tmp)
     rbwinv = inv.(rbw)
     Θ = replaceind(lbw, lbl, tmp) * minket * replaceinds(gate, prime.(originalinds), ketinds) * rbw
     Θ = replaceinds(Θ, originalinds, ketinds)
+    Θorg = Θ
 
     for ibond in firstsite:lastsite-1
         bn = bondname(mps, ibond)
@@ -311,17 +317,22 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
         mps.siteTensors[mod(ibond, 1:mpslen)] = U
         mps.bondWeights[mod(ibond, 1:mpslen)] = Σ
     end
+    mps.siteTensors[mod(lastsite, 1:mpslen)] = Θ
 
-    mps.siteTensors[mod(lastsite, 1:mpslen)] = Θ * rbwinv
+    Θnew, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
+    errU = norm(Θorg - Θnew)
+
+    mps.siteTensors[mod(lastsite, 1:mpslen)] = mps.siteTensors[mod(lastsite, 1:mpslen)] * rbwinv
     mps.siteTensors[firstsite] = lbwinv * mps.siteTensors[firstsite]
-    return nothing
+    return errU
 end
 
 function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+    errUs = Vector{Float64}(undef, mps.length)
     for firstsite in 1:mps.length
-        update!(mps, gate, originalinds, firstsite; svcutoff, newbonddim)
+        errUs[firstsite] = update!(mps, gate, originalinds, firstsite; svcutoff, newbonddim)
     end
-    return nothing
+    return errUs
 end
 
 function randomInfiniteMPS(sitetype::String, bonddim::Int, mpslen::Int=2; seed::Union{Int,Nothing}=nothing)
