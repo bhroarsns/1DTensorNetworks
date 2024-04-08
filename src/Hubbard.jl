@@ -19,6 +19,7 @@ function hamiltonian(; U::Float64, μ::Float64=U / 2.0)
     if U != 0.0
         singlesite = op("n↑ * n↓", i) * U
         singlesite += op("ntot", i) * -μ
+        singlesite += δ(i, i') * (U / 2.0)
         hbond += singlesite * δ(j, j') * 0.5
         hbond += δ(i, i') * replaceinds(singlesite, [i, i'], [j, j']) * 0.5
     end
