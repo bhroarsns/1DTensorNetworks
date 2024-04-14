@@ -78,6 +78,40 @@ function bond(mps::InfiniteMPS, bondnum::Int)
     return commonind(bw, stl), commonind(bw, str), bw
 end
 
+function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+    for isite in 1:mps.length
+        let stIO = ssio(nopr, "st:$(sitename(mps, isite))")
+            if !isnothing(stIO)
+                st = mps.siteTensors[isite]
+                si = siteInd(mps, isite)
+                bl, br = bondInds(mps, isite)
+                println(stIO, "# $(tags(si)), $(tags(bl)), $(tags(br)), real, imag, abs, angle")
+                for isi in eachval(si)
+                    for ibl in eachval(bl)
+                        for ibr in eachval(br)
+                            entry = st[si=>isi, bl=>ibl, br=>ibr]
+                            println(stIO, "$(isi), $(ibl), $(ibr), $(real(entry)), $(imag(entry)), $(abs(entry)), $(angle(entry))")
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    for ibond in 1:mps.length
+        let bwIO = ssio(nopr, "bw:$(bondname(mps, ibond))")
+            if !isnothing(bwIO)
+                bl, _, bw = bond(mps, ibond)
+                println(bwIO, "# $(bondname(mps, ibond)), real, imag, abs, angle")
+                for ibl in eachval(bl)
+                    entry = bw[ibl, ibl]
+                    println(bwIO, "$(ibl), $(real(entry)), $(imag(entry)), $(abs(entry)), $(angle(entry))")
+                end
+            end
+        end
+    end
+end
+
 function contractKet(mps::InfiniteMPS, firstsite::Int, lastsite::Int; minketonly=false)
     mpslen = mps.length
     ifirst = mod(firstsite, 1:mpslen)
@@ -121,7 +155,8 @@ function contractKet(mps::InfiniteMPS, firstsite::Int, lastsite::Int; minketonly
     return ket, minket, lbw, rbw, lbl, rbr
 end
 
-function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1)
+function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)transfermatrix,",))
     bn1 = bondname(mps, bondnum1)
     bn2 = bondname(mps, bondnum2)
     minket1, lbw, rbw, lb, rb = contractKet(mps, bondnum1 + 1, bondnum1; minketonly=true)
@@ -137,31 +172,113 @@ function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1)
     rket = minket2 * replaceind(rbw, rb, rlink)
     El = lket * prime(dag(lket); tags=bn1)
     Er = rket * prime(dag(rket); tags=bn2)
+
     return El, Er, llink, rlink
 end
 
-function fixedpoint(tm::ITensor, linkind::Index{Int})
-    inds1 = [linkind, linkind']
-    inds2 = uniqueinds(tm, inds1)
+function symmetric(fp::ITensor)
+    return (fp + swapprime(fp, 0, 1)) / 2.0
+end
 
-    D, P, spec, _, e = eigen(tm, inds2, inds1)
+function antisymmetric(fp::ITensor)
+    return (fp - swapprime(fp, 0, 1)) / 2.0
+end
+
+function symprojector(ind1::Index{Int}, ind2::Index{Int})
+    D = dim(ind1)
+    if dim(ind2) != D
+        error("Given indices must have the same dimension.")
+    end
+    indsym = addtags(Index(D * (D + 1) ÷ 2, tags(ind1)), "Sym")
+    indasym = addtags(Index(D * (D - 1) ÷ 2, tags(ind1)), "AntiSym")
+    P = ITensor(ind1, ind2, indsym)
+    Pinv = ITensor(ind1, ind2, indsym')
+    Q = ITensor(ind1, ind2, indasym)
+    Qinv = ITensor(ind1, ind2, indasym')
+
+    for i in 0:D*(D+1)÷2-1
+        qu = i ÷ (D + 1)
+        re = rem(i, D + 1)
+        qu2 = re ÷ (D - qu)
+        lef = mod(re + 1, 1:D-qu)
+        rig = lef + qu2 * D + (-1)^qu2 * (qu + qu2)
+        if lef == rig
+            P[ind1=>lef, ind2=>lef, indsym=>i+1] = 1.0
+            Pinv[ind1=>lef, ind2=>lef, indsym'=>i+1] = 1.0
+        else
+            P[ind1=>lef, ind2=>rig, indsym=>i+1] = 1.0
+            P[ind1=>rig, ind2=>lef, indsym=>i+1] = 1.0
+            Pinv[ind1=>lef, ind2=>rig, indsym'=>i+1] = 0.5
+            Pinv[ind1=>rig, ind2=>lef, indsym'=>i+1] = 0.5
+            Q[ind1=>lef, ind2=>rig, indasym=>i+1-D] = 1.0
+            Q[ind1=>rig, ind2=>lef, indasym=>i+1-D] = -1.0
+            Qinv[ind1=>lef, ind2=>rig, indasym'=>i+1-D] = 0.5
+            Qinv[ind1=>rig, ind2=>lef, indasym'=>i+1-D] = -0.5
+        end
+    end
+
+    return P, Pinv, Q, Qinv, indsym, indasym
+end
+
+function sortSpectrum(D::ITensor, P::ITensor, spec::Spectrum, ep::Index{Int}, e::Index{Int})
     eigs = spec.eigs
     indord = sortperm(eigs; by=eig -> abs(eig), rev=true)
     spectrum = map(ie -> D[ie, ie], indord)
     λ = spectrum[begin]
-    v = P * onehot(e => indord[begin])
-    errH = norm((v - swapprime(dag(v), 0, 1)) / 2.0)
-    errR = norm(imag(v))
-    v = real((v + swapprime(dag(v), 0, 1)) / 2.0)
-    return v * sign(tr(v)), λ, spectrum, errH, errR
+    FPs = map(ie -> P * onehot(e => indord[ie]), findall(isapprox(λ), spectrum))
+    return FPs, spectrum, λ
 end
 
-function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1)
-    El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2)
-    σ, λl, lspec, errHl, errRl = fixedpoint(El, ll)
-    μ, λr, rspec, errHr, errRr = fixedpoint(Er, lr)
+function fixedpoint(tm::ITensor, linkind::Index{Int}; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)fixedpoint,",))
+    inds1 = [linkind, linkind']
+    inds2 = uniqueinds(tm, inds1)
 
-    return σ, μ, ll, lr, (λl + λr) / 2.0, lspec, rspec, errHl, errHr, errRl, errRr
+    PS, PSinv, PA, PAinv, indsym, indasym = symprojector(linkind, linkind')
+    symtm = PS * real(tm) * replaceinds(PSinv, inds1, inds2)
+    sFPs, sspec, sλ = sortSpectrum(eigen(symtm)...)
+    sFPs = map(vec -> vec * PS, sFPs)
+
+    let sspecIO = ssio(nopr, "sspec")
+        if !isnothing(sspecIO)
+            println(sspecIO, join(map(γ -> ("$(real(γ)), $(imag(γ))"), sspec), ", "))
+            flush(sspecIO)
+        end
+    end
+
+    asymtm = PA * real(tm) * replaceinds(PAinv, inds1, inds2)
+    aFPs, aspec, aλ = sortSpectrum(eigen(asymtm)...)
+    aFPs = map(vec -> vec * PA, aFPs)
+
+    let errIO = ssio(nopr, "errtm")
+        if !isnothing(errIO)
+            symtmorg = replaceind(replaceind(PSinv, indsym', indsym) * symtm, indsym', indsym) * replaceinds(PS, inds1, inds2)
+            asymtmorg = replaceind(replaceind(PAinv, indasym', indasym) * asymtm, indasym', indasym) * replaceinds(PA, inds1, inds2)
+            errtm = norm(tm - symtmorg - asymtmorg) / norm(tm)
+            println(errIO, errtm)
+            flush(errIO)
+        end
+    end
+
+    let aspecIO = ssio(nopr, "aspec")
+        if !isnothing(aspecIO)
+            println(aspecIO, join(map(γ -> ("$(real(γ)), $(imag(γ))"), aspec), ", "))
+            flush(aspecIO)
+        end
+    end
+
+    degenFP = sλ ≈ aλ ? vcat(sFPs, aFPs) : sFPs
+    v = real(degenFP[begin])
+    return v * sign(tr(v)), sλ, degenFP
+end
+
+function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)environment,",))
+    El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2; opr=nopr, ssio)
+    σ, λl, degenFPl = fixedpoint(El, ll; opr=merge(nopr, (side="left",)), ssio)
+    μ, λr, degenFPr = fixedpoint(Er, lr; opr=merge(nopr, (side="right",)), ssio)
+
+    return σ, μ, ll, lr, (λl + λr) / 2.0, degenFPl, degenFPr
 end
 
 function densitymatrix(mps::InfiniteMPS, dmlen::Int, firstsite::Int; normalized=false)
@@ -223,20 +340,62 @@ function expectedvalues(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Inde
     return evs
 end
 
-function canonicalize!(mps::InfiniteMPS, bondnum::Int; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)canonicalize!,",))
     mpslen = mps.length
-    σ, μ, ll, lr, λ, lspec, rspec, errHl, errHr, errRl, errRr = environment(mps, bondnum)
+    σ, μ, ll, lr, λ, degenFPl, degenFPr = environment(mps, bondnum; opr=nopr, ssio)
     Dl, Ul, _, el, _ = eigen(σ; ishermitian=true, cutoff=fpcutoff)
     Dr, Ur, _, _, _ = eigen(μ; ishermitian=true, cutoff=fpcutoff)
-    errσ = norm(σ - dag(Ul) * Dl * prime(Ul))
-    errμ = norm(μ - dag(Ur) * Dr * prime(Ur))
+
+    let errσIO = ssio(nopr, "errσ")
+        if !isnothing(errσIO)
+            errσ = norm(σ - dag(Ul) * Dl * prime(Ul))
+            println(errσIO, errσ)
+            flush(errσIO)
+        end
+    end
+
+    let errμIO = ssio(nopr, "errμ")
+        if !isnothing(errμIO)
+            errμ = norm(μ - dag(Ur) * Dr * prime(Ur))
+            println(errμIO, errμ)
+            flush(errμIO)
+        end
+    end
+
+    let degenFPlIO = ssio(nopr, "degenFPl")
+        if !isnothing(degenFPlIO)
+            for fp in degenFPl
+                println(degenFPlIO, fp)
+                println(degenFPlIO, prime(dag(Ul)) * fp * Ul)
+            end
+            flush(degenFPlIO)
+        end
+    end
+
+    let degenFPrIO = ssio(nopr, "degenFPr")
+        if !isnothing(degenFPrIO)
+            for fp in degenFPr
+                println(degenFPrIO, fp)
+                println(degenFPrIO, prime(dag(Ur)) * fp * Ur)
+            end
+            flush(degenFPrIO)
+        end
+    end
 
     bl, br, bw = bond(mps, bondnum)
     bn = bondname(mps, bondnum)
 
     Θ = sqrt.(Dl) * dag(Ul) * replaceinds(bw, [bl, br], [ll, lr]) * dag(Ur) * sqrt.(Dr)
     U, Σ, V = svd(Θ, el; cutoff=svcutoff, lefttags="Bond,$(bn),$(bn[1])", righttags="Bond,$(bn),$(bn[2])")
-    errΘ = norm(Θ - U * Σ * V)
+
+    let errΘIO = ssio(nopr, "errΘ")
+        if !isnothing(errΘIO)
+            errΘ = norm(Θ - U * Σ * V)
+            println(errΘIO, errΘ)
+            flush(errΘIO)
+        end
+    end
 
     X = Ul * inv.(sqrt.(Dl)) * U
     Y = V * inv.(sqrt.(Dr)) * Ur
@@ -247,26 +406,24 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; fpcutoff::Float64=0.0, sv
     mps.siteTensors[mod(bondnum, 1:mpslen)] = left
     mps.siteTensors[mod(bondnum + 1, 1:mpslen)] = right
 
-    return λ, lspec, rspec, errHl, errHr, errRl, errRr, errσ, errμ, errΘ
+    takeSnapshot(mps; nopr, ssio)
+
+    return λ
 end
 
-function canonicalizeAll!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+function canonicalizeAll!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)canonicalizeAll!,",))
     λs = Vector{Complex}(undef, mps.length)
-    lspecs = Vector{Vector{Complex}}(undef, mps.length)
-    rspecs = Vector{Vector{Complex}}(undef, mps.length)
-    errs = Vector{Vector{Float64}}(undef, mps.length)
     for ibond in eachindex(λs)
-        λ, lspec, rspec, errHl, errHr, errRl, errRr, errσ, errμ, errΘ = canonicalize!(mps, ibond; fpcutoff, svcutoff)
+        λ = canonicalize!(mps, ibond; opr=merge(nopr, (bond=bondname(mps, ibond),)), ssio, fpcutoff, svcutoff)
         λs[ibond] = λ
-        lspecs[ibond] = lspec
-        rspecs[ibond] = rspec
-        errs[ibond] = [errHl, errHr, errRl, errRr, errσ, errμ, errΘ]
     end
-    return λs, lspecs, rspecs, errs
+    return λs
 end
 
-function normalize!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
-    λs, lspecs, rspecs, errs = canonicalizeAll!(mps; fpcutoff, svcutoff)
+function normalize!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)normalize!,",))
+    λs = canonicalizeAll!(mps; opr=nopr, ssio, fpcutoff, svcutoff)
     divider = sqrt(sum(abs.(λs)) / length(λs))
     for ibond in eachindex(mps.bondWeights)
         bwnorm = norm(mps.bondWeights[ibond])
@@ -278,10 +435,14 @@ function normalize!(mps::InfiniteMPS; fpcutoff::Float64=0.0, svcutoff::Float64=0
     for isite in eachindex(mps.siteTensors)
         mps.siteTensors[isite] /= divider
     end
-    return lspecs, rspecs, errs
+
+    takeSnapshot(mps; nopr, ssio)
+
+    return nothing
 end
 
-function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)update!,",))
     mpslen = mps.length
     gatelen = length(originalinds)
     if gatelen > mpslen
@@ -319,20 +480,29 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     end
     mps.siteTensors[mod(lastsite, 1:mpslen)] = Θ
 
-    Θnew, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
-    errU = norm(Θorg - Θnew)
+    let errUIO = ssio(nopr, "errU")
+        if !isnothing(errUIO)
+            Θnew, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
+            errU = norm(Θorg - Θnew) / norm(Θorg)
+            println(errUIO, errU)
+        end
+    end
 
     mps.siteTensors[mod(lastsite, 1:mpslen)] = mps.siteTensors[mod(lastsite, 1:mpslen)] * rbwinv
     mps.siteTensors[firstsite] = lbwinv * mps.siteTensors[firstsite]
-    return errU
+    takeSnapshot(mps; nopr, ssio)
+
+    return nothing
 end
 
-function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
-    errUs = Vector{Float64}(undef, mps.length)
+function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+    nopr = merge(opr, (methodcall="$(opr.methodcall)update!,",))
     for firstsite in 1:mps.length
-        errUs[firstsite] = update!(mps, gate, originalinds, firstsite; svcutoff, newbonddim)
+        update!(mps, gate, originalinds, firstsite; opr=nopr, ssio, svcutoff, newbonddim)
     end
-    return errUs
+
+    takeSnapshot(mps; nopr, ssio)
+    return nothing
 end
 
 function randomInfiniteMPS(sitetype::String, bonddim::Int, mpslen::Int=2; seed::Union{Int,Nothing}=nothing)
@@ -362,7 +532,6 @@ function randomInfiniteMPS(sitetype::String, bonddims::Vector{Int}; seed::Union{
     end
     return InfiniteMPS(siteTensors, bondWeights)
 end
-
 
 function getsitenum(mps::InfiniteMPS, sc::Char)
     sn = sc - 'A' + 1

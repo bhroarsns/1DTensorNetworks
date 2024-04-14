@@ -3,3 +3,4 @@ snapshots
 plots
 tex
 log*
+src/test.jl

@@ -2,49 +2,6 @@ include("../modules/iMPS.jl")
 include("../modules/util.jl")
 using Printf
 
-function takeSnapshot(mps::InfiniteMPS, snapshotdir::String, number::Int)
-    for isite in 1:mps.length
-        mkpathINE("./$(snapshotdir)/" * sitename(mps, isite))
-        st = mps.siteTensors[isite]
-        si = siteInd(mps, isite)
-        bl, br = bondInds(mps, isite)
-        snapshot("./$(snapshotdir)/" * sitename(mps, isite) * "/$(number).dat", st, si, bl, br)
-    end
-    for ibond in 1:mps.length
-        mkpathINE("./$(snapshotdir)/" * bondname(mps, ibond))
-        open("./$(snapshotdir)/" * bondname(mps, ibond) * "/$(number).dat", "w") do io
-            bl, _, bw = bond(mps, ibond)
-            for ibl in eachval(bl)
-                entry = bw[ibl, ibl]
-                println(io, "$(ibl), $(entry)")
-            end
-        end
-    end
-end
-
-function recordSpecs(mps::InfiniteMPS, lspecs::Vector{Vector{Complex}}, rspecs::Vector{Vector{Complex}}, snapshotdir::String)
-    for ibond in eachindex(lspecs)
-        open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_left.dat", "a") do io
-            println(io, join(map(λ -> "$(real(λ)), $(imag(λ))", lspecs[ibond]), ", "))
-        end
-        open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_right.dat", "a") do io
-            println(io, join(map(λ -> "$(real(λ)), $(imag(λ))", rspecs[ibond]), ", "))
-        end
-    end
-end
-
-function recordErrs(mps::InfiniteMPS, errs::Vector{Vector{Float64}}, snapshotdir::String, errUs::Union{Vector{Float64},Nothing}=nothing)
-    for ibond in eachindex(errs)
-        open("./$(snapshotdir)/error/$(bondname(mps, ibond)).dat", "a") do io
-            if isnothing(errUs)
-                println(io, join(errs[ibond], ", "))
-            else
-                println(io, join(errs[ibond], ", "), ", ", errUs[ibond])
-            end
-        end
-    end
-end
-
 function measurement(resultdir::String, mps::InfiniteMPS, hloc::ITensor, originalinds::Vector{Index{Int}}, istep::Int, β::Float64; singlesite::Union{ITensor,Nothing}=nothing, obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing)
     evs = real.(expectedvalues(mps, hloc, originalinds; normalized=true))
     aveev = sum(evs) / length(evs)
@@ -65,6 +22,27 @@ function measurement(resultdir::String, mps::InfiniteMPS, hloc::ITensor, origina
     end
 end
 
+function genssio(snapshotdir::String)
+    return (opr::NamedTuple, ssname::String) -> begin
+        mkpathINE("$(snapshotdir)/Step/$(opr.step)/$(opr.state)")
+        mkpathINE("$(snapshotdir)/Spec/$(opr.state)")
+        mkpathINE("$(snapshotdir)/Err/$(opr.state)")
+        ssname == "errtm" && return open("$(snapshotdir)/Err/$(opr.state)/errtm.dat", "a")
+        ssname == "sspec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_sym.dat", "a")
+        ssname == "aspec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_asym.dat", "a")
+        ssname == "errσ" && return open("$(snapshotdir)/Err/$(opr.state)/errσ.dat", "a")
+        ssname == "errμ" && return open("$(snapshotdir)/Err/$(opr.state)/errμ.dat", "a")
+        ssname == "degenFPl" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_left_degenFP.dat", "w")
+        ssname == "degenFPr" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_right_degenFP.dat", "w")
+        ssname == "errΘ" && return open("$(snapshotdir)/Err/$(opr.state)/errΘ.dat", "a")
+        if (opr.methodcall == "normalize!,") || (opr.methodcall == "update!,")
+            startswith(ssname, "st") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w")
+            startswith(ssname, "bw") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w")
+        end
+        return nothing
+    end
+end
+
 function doiTEBD(
     # Hamiltonian
     modelname::String,
@@ -82,43 +60,29 @@ function doiTEBD(
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)"
     resultdir, snapshotdir = setupDir(target)
-    mkpathINE("./$(snapshotdir)/spectrum")
-    mkpathINE("./$(snapshotdir)/error")
     open("$(resultdir)/energy.dat", "w") do io
         println(io, "# D=$(D), seed=$(seed)")
     end
-    
+
     β = 0.0
     totsteps = 0
     mps = randomInfiniteMPS(sitetype, D, mpslen; seed)
-    for ibond in 1:mpslen
-        open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_left.dat", "w")
-        open("./$(snapshotdir)/spectrum/$(bondname(mps, ibond))_right.dat", "w")
-        open("./$(snapshotdir)/error/$(bondname(mps, ibond)).dat", "w")
-    end
-    lspecs, rspecs, errs = normalize!(mps)
-    
-    recordSpecs(mps, lspecs, rspecs, snapshotdir)
-    recordErrs(mps, errs, snapshotdir)
-    takeSnapshot(mps, snapshotdir, 0)
+    normalize!(mps; opr=(step=0, methodcall="",state="FUN"), ssio=genssio(snapshotdir))
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
 
     for (Δτ, steps) in Δτs
         gate = exp(-Δτ * hloc)
         sgate = isnothing(singlesite) ? nothing : exp(-Δτ * singlesite)
         for istep in 1:steps
-            print("\r", istep)
-            errUs = update!(mps, gate, originalinds)
+            curstep = totsteps + istep
+            print("\r", curstep)
+            update!(mps, gate, originalinds; opr=(step=curstep, methodcall="",state="BSU"), ssio=genssio(snapshotdir))
             if !isnothing(sgate)
-                lspecs, rspecs, errs = normalize!(mps)
-                update!(mps, sgate, [originalinds[begin]])
+                normalize!(mps; opr=(step=curstep, methodcall="",state="BSN"), ssio=genssio(snapshotdir))
+                update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="",state="FUU"), ssio=genssio(snapshotdir))
             end
-            lspecs, rspecs, errs = normalize!(mps)
-
-            recordSpecs(mps, lspecs, rspecs, snapshotdir)
-            recordErrs(mps, errs, snapshotdir, errUs)
-            takeSnapshot(mps, snapshotdir, istep)
-            measurement(resultdir, mps, hloc, originalinds, totsteps + istep, β + Δτ * istep; singlesite, obs)
+            normalize!(mps; opr=(step=curstep, methodcall="",state="FUN"), ssio=genssio(snapshotdir))
+            measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * curstep; singlesite, obs)
         end
 
         β += Δτ * steps
