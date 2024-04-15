@@ -90,7 +90,7 @@ function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio:
                     for ibl in eachval(bl)
                         for ibr in eachval(br)
                             entry = st[si=>isi, bl=>ibl, br=>ibr]
-                            println(stIO, "$(isi), $(ibl), $(ibr), $(real(entry)), $(imag(entry)), $(abs(entry)), $(angle(entry))")
+                            println(stIO, isi, ", ", ibl, ", ", ibr, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
                         end
                     end
                 end
@@ -105,7 +105,7 @@ function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio:
                 println(bwIO, "# $(bondname(mps, ibond)), real, imag, abs, angle")
                 for ibl in eachval(bl)
                     entry = bw[ibl, ibl]
-                    println(bwIO, "$(ibl), $(real(entry)), $(imag(entry)), $(abs(entry)), $(angle(entry))")
+                    println(bwIO, ibl, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
                 end
             end
         end
@@ -229,7 +229,7 @@ function sortSpectrum(D::ITensor, P::ITensor, spec::Spectrum, ep::Index{Int}, e:
     return FPs, spectrum, λ
 end
 
-function fixedpoint(tm::ITensor, linkind::Index{Int}; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+function fixedpoint(tm::ITensor, linkind::Index{Int}; calcAsym=true, opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
     nopr = merge(opr, (methodcall="$(opr.methodcall)fixedpoint,",))
     inds1 = [linkind, linkind']
     inds2 = uniqueinds(tm, inds1)
@@ -238,36 +238,48 @@ function fixedpoint(tm::ITensor, linkind::Index{Int}; opr::NamedTuple=(methodcal
     symtm = PS * real(tm) * replaceinds(PSinv, inds1, inds2)
     sFPs, sspec, sλ = sortSpectrum(eigen(symtm)...)
     sFPs = map(vec -> vec * PS, sFPs)
+    degenFP = sFPs
 
     let sspecIO = ssio(nopr, "sspec")
         if !isnothing(sspecIO)
-            println(sspecIO, join(map(γ -> ("$(real(γ)), $(imag(γ))"), sspec), ", "))
+            for γ in sspec
+                print(sspecIO, real(γ), ", ", imag(γ), ", ")
+            end
+            print(sspecIO, "\n")
             flush(sspecIO)
         end
     end
 
-    asymtm = PA * real(tm) * replaceinds(PAinv, inds1, inds2)
-    aFPs, aspec, aλ = sortSpectrum(eigen(asymtm)...)
-    aFPs = map(vec -> vec * PA, aFPs)
+    if calcAsym
+        asymtm = PA * real(tm) * replaceinds(PAinv, inds1, inds2)
+        aFPs, aspec, aλ = sortSpectrum(eigen(asymtm)...)
+        aFPs = map(vec -> vec * PA, aFPs)
 
-    let errIO = ssio(nopr, "errtm")
-        if !isnothing(errIO)
-            symtmorg = replaceind(replaceind(PSinv, indsym', indsym) * symtm, indsym', indsym) * replaceinds(PS, inds1, inds2)
-            asymtmorg = replaceind(replaceind(PAinv, indasym', indasym) * asymtm, indasym', indasym) * replaceinds(PA, inds1, inds2)
-            errtm = norm(tm - symtmorg - asymtmorg) / norm(tm)
-            println(errIO, errtm)
-            flush(errIO)
+        let errIO = ssio(nopr, "errtm")
+            if !isnothing(errIO)
+                symtmorg = replaceind(replaceind(PSinv, indsym', indsym) * symtm, indsym', indsym) * replaceinds(PS, inds1, inds2)
+                asymtmorg = replaceind(replaceind(PAinv, indasym', indasym) * asymtm, indasym', indasym) * replaceinds(PA, inds1, inds2)
+                errtm = norm(tm - symtmorg - asymtmorg) / norm(tm)
+                println(errIO, errtm)
+                flush(errIO)
+            end
+        end
+
+        let aspecIO = ssio(nopr, "aspec")
+            if !isnothing(aspecIO)
+                for γ in aspec
+                    print(aspecIO, real(γ), ", ", imag(γ), ", ")
+                end
+                print(aspecIO, "\n")
+                flush(aspecIO)
+            end
+        end
+
+        if sλ ≈ aλ
+            append!(degenFP, aFPs)
         end
     end
 
-    let aspecIO = ssio(nopr, "aspec")
-        if !isnothing(aspecIO)
-            println(aspecIO, join(map(γ -> ("$(real(γ)), $(imag(γ))"), aspec), ", "))
-            flush(aspecIO)
-        end
-    end
-
-    degenFP = sλ ≈ aλ ? vcat(sFPs, aFPs) : sFPs
     v = real(degenFP[begin])
     return v * sign(tr(v)), sλ, degenFP
 end

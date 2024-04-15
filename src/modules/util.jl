@@ -9,7 +9,9 @@ end
 function setupDir(target::String)
     resultdir = "./results/$(target)"
     snapshotdir = "./snapshots/$(target)"
-    rm(snapshotdir, recursive=true)
+    if isdir(snapshotdir)
+        rm(snapshotdir, recursive=true)
+    end
     mkpathINE(resultdir)
     mkpathINE(snapshotdir)
     mkpathINE("./tex/$(target)")

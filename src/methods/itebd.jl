@@ -89,5 +89,7 @@ function doiTEBD(
         totsteps += steps
     end
 
+    println("\r", modelname, ": finished")
+
     return nothing
 end
