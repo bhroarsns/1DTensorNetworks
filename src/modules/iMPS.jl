@@ -78,9 +78,9 @@ function bond(mps::InfiniteMPS, bondnum::Int)
     return commonind(bw, stl), commonind(bw, str), bw
 end
 
-function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
     for isite in 1:mps.length
-        let stIO = ssio(nopr, "st:$(sitename(mps, isite))")
+        let (stIO, prefix) = ssio(nopr, "st:$(sitename(mps, isite))")
             if !isnothing(stIO)
                 st = mps.siteTensors[isite]
                 si = siteInd(mps, isite)
@@ -99,7 +99,7 @@ function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio:
     end
 
     for ibond in 1:mps.length
-        let bwIO = ssio(nopr, "bw:$(bondname(mps, ibond))")
+        let (bwIO, prefix) = ssio(nopr, "bw:$(bondname(mps, ibond))")
             if !isnothing(bwIO)
                 bl, _, bw = bond(mps, ibond)
                 println(bwIO, "# $(bondname(mps, ibond)), real, imag, abs, angle")
@@ -155,7 +155,7 @@ function contractKet(mps::InfiniteMPS, firstsite::Int, lastsite::Int; minketonly
     return ket, minket, lbw, rbw, lbl, rbr
 end
 
-function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
     nopr = merge(opr, (methodcall="$(opr.methodcall)transfermatrix,",))
     bn1 = bondname(mps, bondnum1)
     bn2 = bondname(mps, bondnum2)
@@ -224,24 +224,26 @@ function sortSpectrum(D::ITensor, P::ITensor, spec::Spectrum, ep::Index{Int}, e:
     eigs = spec.eigs
     indord = sortperm(eigs; by=eig -> abs(eig), rev=true)
     spectrum = map(ie -> D[ie, ie], indord)
-    λ = spectrum[begin]
-    FPs = map(ie -> P * onehot(e => indord[ie]), findall(isapprox(λ), spectrum))
-    return FPs, spectrum, λ
+    λind = findfirst(isreal, spectrum)
+    λ = isnothing(λind) ? spectrum[begin] : spectrum[λind]
+    FPs = map(ie -> P * onehot(e => indord[ie]), findall(isapprox(abs(λ)), abs.(spectrum)))
+    return FPs, spectrum, λ, λind
 end
 
-function fixedpoint(tm::ITensor, linkind::Index{Int}; calcAsym=true, opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+function fixedpoint(tm::ITensor, linkind::Index{Int}; calcAsym=true, opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
     nopr = merge(opr, (methodcall="$(opr.methodcall)fixedpoint,",))
     inds1 = [linkind, linkind']
     inds2 = uniqueinds(tm, inds1)
 
     PS, PSinv, PA, PAinv, indsym, indasym = symprojector(linkind, linkind')
     symtm = PS * real(tm) * replaceinds(PSinv, inds1, inds2)
-    sFPs, sspec, sλ = sortSpectrum(eigen(symtm)...)
+    sFPs, sspec, sλ, sλind = sortSpectrum(eigen(symtm)...)
     sFPs = map(vec -> vec * PS, sFPs)
-    degenFP = sFPs
+    degenFP = sFPs ./ norm.(sFPs)
 
-    let sspecIO = ssio(nopr, "sspec")
+    let (sspecIO, prefix) = ssio(nopr, "sspec")
         if !isnothing(sspecIO)
+            print(sspecIO, prefix...)
             for γ in sspec
                 print(sspecIO, real(γ), ", ", imag(γ), ", ")
             end
@@ -252,21 +254,23 @@ function fixedpoint(tm::ITensor, linkind::Index{Int}; calcAsym=true, opr::NamedT
 
     if calcAsym
         asymtm = PA * real(tm) * replaceinds(PAinv, inds1, inds2)
-        aFPs, aspec, aλ = sortSpectrum(eigen(asymtm)...)
+        aFPs, aspec, aλ, _ = sortSpectrum(eigen(asymtm)...)
         aFPs = map(vec -> vec * PA, aFPs)
+        aFPs ./= norm.(aFPs)
 
-        let errIO = ssio(nopr, "errtm")
+        let (errIO, prefix) = ssio(nopr, "errtm")
             if !isnothing(errIO)
                 symtmorg = replaceind(replaceind(PSinv, indsym', indsym) * symtm, indsym', indsym) * replaceinds(PS, inds1, inds2)
                 asymtmorg = replaceind(replaceind(PAinv, indasym', indasym) * asymtm, indasym', indasym) * replaceinds(PA, inds1, inds2)
                 errtm = norm(tm - symtmorg - asymtmorg) / norm(tm)
-                println(errIO, errtm)
+                println(errIO, prefix..., errtm)
                 flush(errIO)
             end
         end
 
-        let aspecIO = ssio(nopr, "aspec")
+        let (aspecIO, prefix) = ssio(nopr, "aspec")
             if !isnothing(aspecIO)
+                print(aspecIO, prefix...)
                 for γ in aspec
                     print(aspecIO, real(γ), ", ", imag(γ), ", ")
                 end
@@ -275,16 +279,29 @@ function fixedpoint(tm::ITensor, linkind::Index{Int}; calcAsym=true, opr::NamedT
             end
         end
 
+        let (totspecIO, prefix) = ssio(nopr, "totspec")
+            if !isnothing(totspecIO)
+                print(totspecIO, prefix...)
+                totspec = sort(vcat(sspec, aspec); by=abs, rev=true)
+                for γ in totspec
+                    print(totspecIO, real(γ), ", ", imag(γ), ", ")
+                end
+                print(totspecIO, "\n")
+                flush(totspecIO)
+            end
+
+        end
+
         if sλ ≈ aλ
             append!(degenFP, aFPs)
         end
     end
 
-    v = real(degenFP[begin])
+    v = real(degenFP[sλind])
     return v * sign(tr(v)), sλ, degenFP
 end
 
-function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing)
+function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
     nopr = merge(opr, (methodcall="$(opr.methodcall)environment,",))
     El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2; opr=nopr, ssio)
     σ, λl, degenFPl = fixedpoint(El, ll; opr=merge(nopr, (side="left",)), ssio)
@@ -352,31 +369,32 @@ function expectedvalues(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Inde
     return evs
 end
 
-function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
     nopr = merge(opr, (methodcall="$(opr.methodcall)canonicalize!,",))
     mpslen = mps.length
     σ, μ, ll, lr, λ, degenFPl, degenFPr = environment(mps, bondnum; opr=nopr, ssio)
     Dl, Ul, _, el, _ = eigen(σ; ishermitian=true, cutoff=fpcutoff)
     Dr, Ur, _, _, _ = eigen(μ; ishermitian=true, cutoff=fpcutoff)
 
-    let errσIO = ssio(nopr, "errσ")
+    let (errσIO, prefix) = ssio(nopr, "errσ")
         if !isnothing(errσIO)
             errσ = norm(σ - dag(Ul) * Dl * prime(Ul))
-            println(errσIO, errσ)
+            println(errσIO, prefix..., errσ)
             flush(errσIO)
         end
     end
 
-    let errμIO = ssio(nopr, "errμ")
+    let (errμIO, prefix) = ssio(nopr, "errμ")
         if !isnothing(errμIO)
             errμ = norm(μ - dag(Ur) * Dr * prime(Ur))
-            println(errμIO, errμ)
+            println(errμIO, prefix..., errμ)
             flush(errμIO)
         end
     end
 
-    let degenFPlIO = ssio(nopr, "degenFPl")
+    let (degenFPlIO, prefix) = ssio(nopr, "degenFPl")
         if !isnothing(degenFPlIO)
+            print(degenFPlIO, prefix...)
             for fp in degenFPl
                 println(degenFPlIO, fp)
                 println(degenFPlIO, prime(dag(Ul)) * fp * Ul)
@@ -385,8 +403,9 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodca
         end
     end
 
-    let degenFPrIO = ssio(nopr, "degenFPr")
+    let (degenFPrIO, prefix) = ssio(nopr, "degenFPr")
         if !isnothing(degenFPrIO)
+            print(degenFPrIO, prefix...)
             for fp in degenFPr
                 println(degenFPrIO, fp)
                 println(degenFPrIO, prime(dag(Ur)) * fp * Ur)
@@ -401,10 +420,10 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodca
     Θ = sqrt.(Dl) * dag(Ul) * replaceinds(bw, [bl, br], [ll, lr]) * dag(Ur) * sqrt.(Dr)
     U, Σ, V = svd(Θ, el; cutoff=svcutoff, lefttags="Bond,$(bn),$(bn[1])", righttags="Bond,$(bn),$(bn[2])")
 
-    let errΘIO = ssio(nopr, "errΘ")
+    let (errΘIO, prefix) = ssio(nopr, "errΘ")
         if !isnothing(errΘIO)
             errΘ = norm(Θ - U * Σ * V)
-            println(errΘIO, errΘ)
+            println(errΘIO, prefix..., errΘ)
             flush(errΘIO)
         end
     end
@@ -423,7 +442,7 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodca
     return λ
 end
 
-function canonicalizeAll!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+function canonicalizeAll!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
     nopr = merge(opr, (methodcall="$(opr.methodcall)canonicalizeAll!,",))
     λs = Vector{Complex}(undef, mps.length)
     for ibond in eachindex(λs)
@@ -433,7 +452,7 @@ function canonicalizeAll!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ss
     return λs
 end
 
-function normalize!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
+function normalize!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
     nopr = merge(opr, (methodcall="$(opr.methodcall)normalize!,",))
     λs = canonicalizeAll!(mps; opr=nopr, ssio, fpcutoff, svcutoff)
     divider = sqrt(sum(abs.(λs)) / length(λs))
@@ -453,7 +472,7 @@ function normalize!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Fu
     return nothing
 end
 
-function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
     nopr = merge(opr, (methodcall="$(opr.methodcall)update!,",))
     mpslen = mps.length
     gatelen = length(originalinds)
@@ -466,7 +485,7 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     if gatelen == 1
         Θ = mps.siteTensors[firstsite] * replaceind(gate, prime(originalinds[begin]), siteInd(mps, firstsite))
         mps.siteTensors[firstsite] = replaceind(Θ, originalinds[begin], siteInd(mps, firstsite))
-        return 0.0
+        return nothing
     end
 
     lastsite = firstsite + gatelen - 1
@@ -483,20 +502,37 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     for ibond in firstsite:lastsite-1
         bn = bondname(mps, ibond)
         _, bi = bondInds(mps, ibond)
-        bonddim = isnothing(newbonddim) ? dim(bi) : newbonddim
-        U, Σ, Θ, _, _, tmp = svd(Θ, [tmp, ketinds[begin+ibond-firstsite]];
-            cutoff=svcutoff, maxdim=bonddim,
-            lefttags="Bond,$(bn),$(bn[1])", righttags="Bond,$(bn),$(bn[2])")
-        mps.siteTensors[mod(ibond, 1:mpslen)] = U
-        mps.bondWeights[mod(ibond, 1:mpslen)] = Σ
+        U, _, V, spec, linku, linkv = svd(Θ, [tmp, ketinds[begin+ibond-firstsite]])
+
+        let (specUIO, prefix) = ssio(merge(nopr, (bond=bn,)), "uspec:$(bn)")
+            if !isnothing(specUIO)
+                print(specUIO, prefix...)
+                for γ in spec.eigs
+                    print(specUIO, sqrt(γ), ", ")
+                end
+                println(specUIO)
+                flush(specUIO)
+            end
+        end
+
+        bonddim = isnothing(newbonddim) ? dim(bi) : min(newbonddim, dim(bi))
+        bonddim = min(count(>(svcutoff^2), spec.eigs), bonddim)
+
+        Σ = sqrt.(spec.eigs[1:bonddim])
+        newu = Index(bonddim, "Bond,$(bn),$(bn[1])")
+        tmp = Index(bonddim, "Bond,$(bn),$(bn[2])")
+        mps.siteTensors[mod(ibond, 1:mpslen)] = U * δ(linku, newu)
+        mps.bondWeights[mod(ibond, 1:mpslen)] = diagITensor(Σ, newu, tmp)
+        Θ = δ(tmp, linkv) * V
     end
     mps.siteTensors[mod(lastsite, 1:mpslen)] = Θ
 
-    let errUIO = ssio(nopr, "errU")
+    let (errUIO, prefix) = ssio(nopr, "errU")
         if !isnothing(errUIO)
             Θnew, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
             errU = norm(Θorg - Θnew) / norm(Θorg)
-            println(errUIO, errU)
+            println(errUIO, prefix..., errU)
+            flush(errUIO)
         end
     end
 
@@ -507,10 +543,10 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     return nothing
 end
 
-function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> nothing, svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
     nopr = merge(opr, (methodcall="$(opr.methodcall)update!,",))
     for firstsite in 1:mps.length
-        update!(mps, gate, originalinds, firstsite; opr=nopr, ssio, svcutoff, newbonddim)
+        update!(mps, gate, originalinds, firstsite; opr=merge(nopr, (fs="$(sitename(mps,firstsite))",)), ssio, svcutoff, newbonddim)
     end
 
     takeSnapshot(mps; nopr, ssio)

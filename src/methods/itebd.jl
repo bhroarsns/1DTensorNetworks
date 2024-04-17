@@ -27,19 +27,22 @@ function genssio(snapshotdir::String)
         mkpathINE("$(snapshotdir)/Step/$(opr.step)/$(opr.state)")
         mkpathINE("$(snapshotdir)/Spec/$(opr.state)")
         mkpathINE("$(snapshotdir)/Err/$(opr.state)")
-        ssname == "errtm" && return open("$(snapshotdir)/Err/$(opr.state)/errtm.dat", "a")
-        ssname == "sspec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_sym.dat", "a")
-        ssname == "aspec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_asym.dat", "a")
-        ssname == "errσ" && return open("$(snapshotdir)/Err/$(opr.state)/errσ.dat", "a")
-        ssname == "errμ" && return open("$(snapshotdir)/Err/$(opr.state)/errμ.dat", "a")
-        ssname == "degenFPl" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_left_degenFP.dat", "w")
-        ssname == "degenFPr" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_right_degenFP.dat", "w")
-        ssname == "errΘ" && return open("$(snapshotdir)/Err/$(opr.state)/errΘ.dat", "a")
+        ssname == "errtm" && return open("$(snapshotdir)/Err/$(opr.state)/errtm.dat", "a"), (opr.step, ", ")
+        ssname == "sspec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_sym.dat", "a"), (opr.step, ", ")
+        ssname == "aspec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_asym.dat", "a"), (opr.step, ", ")
+        ssname == "totspec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_tot.dat", "a"), (opr.step, ", ")
+        ssname == "errσ" && return open("$(snapshotdir)/Err/$(opr.state)/errσ.dat", "a"), (opr.step, ", ")
+        ssname == "errμ" && return open("$(snapshotdir)/Err/$(opr.state)/errμ.dat", "a"), (opr.step, ", ")
+        ssname == "degenFPl" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_left_degenFP.dat", "w"), ""
+        ssname == "degenFPr" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_right_degenFP.dat", "w"), ""
+        ssname == "errΘ" && return open("$(snapshotdir)/Err/$(opr.state)/errΘ.dat", "a"), (opr.step, ", ")
+        ssname == "errU" && return open("$(snapshotdir)/Err/$(opr.state)/errU.dat", "a"), (opr.step, ", ", opr.fs, ", ")
+        startswith(ssname, "uspec") && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.fs)_$(opr.bond).dat", "a"), (opr.step, ", ")
         if (opr.methodcall == "normalize!,") || (opr.methodcall == "update!,")
-            startswith(ssname, "st") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w")
-            startswith(ssname, "bw") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w")
+            startswith(ssname, "st") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w"), ""
+            startswith(ssname, "bw") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w"), ""
         end
-        return nothing
+        return nothing, nothing
     end
 end
 
