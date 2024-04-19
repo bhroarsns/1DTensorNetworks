@@ -36,6 +36,7 @@ function genssio(snapshotdir::String)
         ssname == "degenFPl" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_left_degenFP.dat", "w"), ""
         ssname == "degenFPr" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_right_degenFP.dat", "w"), ""
         ssname == "errΘ" && return open("$(snapshotdir)/Err/$(opr.state)/errΘ.dat", "a"), (opr.step, ", ")
+        ssname == "errC" && return open("$(snapshotdir)/Err/$(opr.state)/errC.dat", "a"), (opr.step, ", ")
         ssname == "errU" && return open("$(snapshotdir)/Err/$(opr.state)/errU.dat", "a"), (opr.step, ", ", opr.fs, ", ")
         startswith(ssname, "uspec") && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.fs)_$(opr.bond).dat", "a"), (opr.step, ", ")
         if (opr.methodcall == "normalize!,") || (opr.methodcall == "update!,")

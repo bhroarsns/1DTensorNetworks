@@ -86,6 +86,7 @@ function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio:
                 si = siteInd(mps, isite)
                 bl, br = bondInds(mps, isite)
                 println(stIO, "# $(tags(si)), $(tags(bl)), $(tags(br)), real, imag, abs, angle")
+                println(stIO, dim(si), ", ", dim(bl), ", ", dim(br))
                 for isi in eachval(si)
                     for ibl in eachval(bl)
                         for ibr in eachval(br)
@@ -94,6 +95,7 @@ function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio:
                         end
                     end
                 end
+                flush(stIO)
             end
         end
     end
@@ -107,6 +109,7 @@ function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio:
                     entry = bw[ibl, ibl]
                     println(bwIO, ibl, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
                 end
+                flush(bwIO)
             end
         end
     end
@@ -436,6 +439,16 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodca
     mps.bondWeights[mod(bondnum, 1:mpslen)] = Σ
     mps.siteTensors[mod(bondnum, 1:mpslen)] = left
     mps.siteTensors[mod(bondnum + 1, 1:mpslen)] = right
+
+    let (errCanon, prefix) = ssio(nopr, "errC")
+        if !isnothing(errCanon)
+            El, Er, llink, rlink = transfermatrix(mps, bondnum; opr=nopr, ssio)
+            errleft = norm(El * δ(llink, llink') - λ * δ(uniqueinds(El, [llink, llink'])...))
+            errright = norm(Er * δ(rlink, rlink') - λ * δ(uniqueinds(Er, [rlink, rlink'])...))
+            println(errCanon, prefix..., errleft, ", ", errright)
+            flush(errCanon)
+        end
+    end
 
     takeSnapshot(mps; nopr, ssio)
 
