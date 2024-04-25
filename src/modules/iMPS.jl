@@ -360,7 +360,7 @@ end
 function expectedvalue(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; normalized=false)
     oplen = length(originalinds)
     ρ, ketinds = densitymatrix(mps, oplen, firstsite; normalized)
-    ev = ρ * replaceinds(op, [prime.(originalinds)..., originalinds...], [ketinds..., prime.(ketinds)...])
+    ev = ρ * replaceinds(op, [originalinds..., prime.(originalinds)...], [ketinds..., prime.(ketinds)...])
     return ev[1]
 end
 
@@ -496,8 +496,8 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     firstsite = mod(firstsite, 1:mpslen)
     # single site gate evolution do not require lbwinv / rbwinv
     if gatelen == 1
-        Θ = mps.siteTensors[firstsite] * replaceind(gate, prime(originalinds[begin]), siteInd(mps, firstsite))
-        mps.siteTensors[firstsite] = replaceind(Θ, originalinds[begin], siteInd(mps, firstsite))
+        Θ = mps.siteTensors[firstsite] * replaceind(gate, originalinds[begin], siteInd(mps, firstsite))
+        mps.siteTensors[firstsite] = replaceind(Θ, prime(originalinds[begin]), siteInd(mps, firstsite))
         return nothing
     end
 
@@ -508,8 +508,8 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     tmp = sim(lbl)
     lbwinv = replaceind(inv.(lbw), lbl, tmp)
     rbwinv = inv.(rbw)
-    Θ = replaceind(lbw, lbl, tmp) * minket * replaceinds(gate, prime.(originalinds), ketinds) * rbw
-    Θ = replaceinds(Θ, originalinds, ketinds)
+    Θ = replaceind(lbw, lbl, tmp) * minket * replaceinds(gate, originalinds, ketinds) * rbw
+    Θ = replaceinds(Θ, prime.(originalinds), ketinds)
     Θorg = Θ
 
     for ibond in firstsite:lastsite-1
