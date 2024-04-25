@@ -1,6 +1,7 @@
 include("../modules/iMPS.jl")
 include("../modules/util.jl")
 using Printf
+using HDF5
 
 function measurement(resultdir::String, mps::InfiniteMPS, hloc::ITensor, originalinds::Vector{Index{Int}}, istep::Int, β::Float64; singlesite::Union{ITensor,Nothing}=nothing, obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing)
     evs = real.(expectedvalues(mps, hloc, originalinds; normalized=true))
@@ -71,7 +72,7 @@ function doiTEBD(
     β = 0.0
     totsteps = 0
     mps = randomInfiniteMPS(sitetype, D, mpslen; seed)
-    normalize!(mps; opr=(step=0, methodcall="",state="FUN"), ssio=genssio(snapshotdir))
+    normalize!(mps; opr=(step=0, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
 
     for (Δτ, steps) in Δτs
@@ -80,20 +81,63 @@ function doiTEBD(
         for istep in 1:steps
             curstep = totsteps + istep
             print("\r", curstep)
-            update!(mps, gate, originalinds; opr=(step=curstep, methodcall="",state="BSU"), ssio=genssio(snapshotdir))
+            update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
             if !isnothing(sgate)
-                normalize!(mps; opr=(step=curstep, methodcall="",state="BSN"), ssio=genssio(snapshotdir))
-                update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="",state="FUU"), ssio=genssio(snapshotdir))
+                normalize!(mps; opr=(step=curstep, methodcall="", state="BSN"), ssio=genssio(snapshotdir))
+                update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="", state="FUU"), ssio=genssio(snapshotdir))
             end
-            normalize!(mps; opr=(step=curstep, methodcall="",state="FUN"), ssio=genssio(snapshotdir))
+            normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
             measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * curstep; singlesite, obs)
         end
 
         β += Δτ * steps
         totsteps += steps
     end
-
     println("\r", modelname, ": finished")
+
+    f = h5open("./$(snapshotdir)/mps.h5", "w")
+    for isite in eachindex(mps.siteTensors)
+        write(f, "$(sitename(mps, isite))", mps.siteTensors[isite])
+        write(f, "$(bondname(mps, isite))", mps.bondWeights[isite])
+    end
+    close(f)
+
+    El, _, llink, _ = transfermatrix(mps, 1)
+    leftInds = uniqueinds(El, [llink, llink'])
+    P, Pinv, Q, Qinv, indsym, indasym = symprojector(llink, llink')
+    symtm = P * El * replaceinds(Pinv, [llink, llink'], leftInds)
+    asymtm = Q * El * replaceinds(Qinv, [llink, llink'], leftInds)
+    open("$(snapshotdir)/tm.dat", "w") do io
+        println(io, dim(llink), ", ", dim(llink'), ", ", dim(leftInds[1]), ", ", dim(leftInds[2]))
+        for il1 in eachval(llink)
+            for il2 in eachval(llink')
+                for ir1 in eachval(leftInds[1])
+                    for ir2 in eachval(leftInds[2])
+                        entry = El[llink=>il1, llink'=>il2, leftInds[1]=>ir1, leftInds[2]=>ir2]
+                        println(io, il1, ", ", il2, ", ", ir1, ", ", ir2, ", ", il1 + dim(llink) * (il2 - 1), ", ", ir1 + dim(leftInds[1]) * (ir2 - 1), ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
+                    end
+                end
+            end
+        end
+    end
+    open("$(snapshotdir)/symtm.dat", "w") do io
+        println(io, dim(indsym), ", ", dim(indsym'))
+        for is1 in eachval(indsym)
+            for is2 in eachval(indsym')
+                entry = symtm[indsym=>is1, indsym'=>is2]
+                println(io, is1, ", ", is2, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
+            end
+        end
+    end
+    open("$(snapshotdir)/asymtm.dat", "w") do io
+        println(io, dim(indasym), ", ", dim(indasym'))
+        for ia1 in eachval(indasym)
+            for ia2 in eachval(indasym')
+                entry = asymtm[indasym=>ia1, indasym'=>ia2]
+                println(io, ia1, ", ", ia2, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
+            end
+        end
+    end
 
     return nothing
 end
