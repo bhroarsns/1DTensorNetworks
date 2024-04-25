@@ -5,6 +5,7 @@ exac = -0.267155
 
 set term tikz standalone size 8in,6in
 set output outfile
+# set title target
 
 set xlabel 'TEBD steps'
 set ylabel 'Energy Density $E_{GS}$'

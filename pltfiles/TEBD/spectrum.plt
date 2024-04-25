@@ -1,4 +1,4 @@
-target = "Hubbard/U=10.0/iTEBD/mpslen=2/D=16/seed=10"
+target = "Hubbard/U=10.0/iTEBD/mpslen=2/D=32/seed=10"
 outfile = "./tex/".target."/spectrum.tex"
 sfile = "snapshots/".target."/Spec/FUN/AB_left_sym.dat"
 afile = "snapshots/".target."/Spec/FUN/AB_left_asym.dat"
@@ -6,6 +6,7 @@ tfile = "snapshots/".target."/Spec/FUN/AB_left_tot.dat"
 
 set term tikz standalone size 8in,6in
 set output outfile
+# set title target
 complex(x,y) = x*{1,0}+y*{0,1}
 
 set xlabel 'TEBD steps'
