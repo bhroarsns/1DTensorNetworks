@@ -1,4 +1,5 @@
 using ITensors
+using Dates
 
 function mkpathINE(path::String)
     if !isdir(path)
@@ -7,15 +8,16 @@ function mkpathINE(path::String)
 end
 
 function setupDir(target::String)
-    resultdir = "./results/$(target)"
-    snapshotdir = "./snapshots/$(target)"
+    targetwts = "$(Date(Dates.now()))/$(target)"
+    resultdir = "./results/$(targetwts)"
+    snapshotdir = "./snapshots/$(targetwts)"
     if isdir(snapshotdir)
         rm(snapshotdir, recursive=true)
     end
     mkpathINE(resultdir)
     mkpathINE(snapshotdir)
-    mkpathINE("./tex/$(target)")
-    mkpathINE("./plots/$(target)")
+    mkpathINE("./tex/$(targetwts)")
+    mkpathINE("./plots/$(targetwts)")
     return resultdir, snapshotdir
 end
 

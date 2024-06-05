@@ -27,16 +27,16 @@ function hamiltonian(; U::Float64, μ::Float64=U / 2.0)
     return modelname, hloc, orginds, singlesite, hbond
 end
 
-function executeTEBD(; U::Float64, μ::Float64=U / 2.0)
+function executeTEBD(seed::Int, initΔτ::Float64; U::Float64, μ::Float64=U / 2.0)
     modelname, hloc, orginds, singlesite, hbond = hamiltonian(; U, μ)
     doiTEBD(
         modelname,
         hloc,
         orginds,
         "Electron",
-        [(0.1, 500)],
+        initΔτ,
         16,
-        10;
+        seed;
         singlesite,
         obs=[
             (op("ntot", orginds[begin]), [orginds[begin]]),
