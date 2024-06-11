@@ -1,20 +1,21 @@
 target = "2024-06-11/Hubbard/U=0.0/iTEBD/mpslen=2/D=32/seed=10/initΔτ=0.1"
 sitetype = 4
 
-sdir = "./snapshotdir/".target
+filename(gt,ig,it,is) = sprintf("./snapshotdir/%s/%c%s%d.dat", target, 64+it, gt == 1 ? "s" : "sd", ig)
 
 # 各行列のサイズを1×1とする
 # 行列間の余白幅をmとする
 # 各gaugeのパネルのサイズは(st+(st-1)*m)×(2+m)
 # gaugeのラベルは(st+(st-1)*m)×1ぐらい?
 # gauge一個分で(st+(st-1)*m)×(3+m)
-# gaugeパネル間の余白幅は2m
-# →全体のサイズは(st*st+(st*st+st+2)*m)×(6+8m)
+# gaugeパネル間の余白幅はMP*m
+# →全体のサイズは(st*st+(st*st-st+(st+1)*MP)*m)×(6+(2+(st+1)*MP)*m)
 mult = 10
+MP = 4
 M = 16
 m = 1.0 / M
-xlen = sitetype * sitetype + (sitetype * sitetype + sitetype + 2) * m
-ylen = (6 + 8 * m)
+xlen = sitetype * sitetype + (sitetype * sitetype - sitetype + (sitetype + 1) * MP) * m
+ylen = 6 + (2 + (sitetype + 1) * MP) * m
 xsize = mult * M * xlen
 ysize = mult * M * ylen
 smatx = 1.0 / xlen
@@ -24,25 +25,61 @@ smary = 1.0 / ylen * m
 sgaux = sitetype * smatx + (sitetype - 1) * smarx
 sgauy = 3 * smaty + smary
 
-originx(gt,ig,it,is) = smarx + (ig - 1) * (sgaux + 2 * smarx) + (is - 1) * (smatx + smarx)
-originy(gt,ig,it,is) = 1 - 2 * smary - (gt - 1) * (sgauy + 2 * smary) - (it - 1) * (smaty + smary)
+originx(gt,ig,it,is) = MP * smarx + (ig - 1) * (sgaux + MP * smarx) + (is - 1) * (smatx + smarx)
+originy(gt,ig,it,is) = MP * smary + (2 - gt) * (sgauy + MP * smary) + (2 - it) * (smaty + smary)
 
-# set term png size xsize,ysize
-# set output "heat.png"
+set term png size xsize,ysize
+set output "heat.png"
 
 set multiplot
 
+set origin originx(0,2,0,1),(sgauy+4*MP*smary+smary+2.5*smaty)
+set size 2*sgaux,smaty*0.5
+set margins 0,0,0,0
+unset tics
+unset key
+set xrange [1:3]
+set yrange [-3:-1]
+set label target at 2,-2 center font ",24" noenhanced
+plot '+'
+unset label
+
+do for [ig = 1:sitetype] {
+    set origin originx(0,ig,0,1),(2*MP*smary+smary+2*smaty)
+    set size sgaux,smaty*0.5
+    set margins 0,0,0,0
+    unset tics
+    unset key
+    set xrange [1:3]
+    set yrange [-3:-1]
+    set label sprintf("A%ds-B%dd gauge", ig, sitetype - ig + 1) at 2,-2 center font ",24"
+    plot '+'
+    unset label
+
+    set origin originx(0,ig,0,1),(sgauy+3*MP*smary+smary+2*smaty)
+    set size sgaux,smaty*0.5
+    set margins 0,0,0,0
+    unset tics
+    unset key
+    set xrange [1:3]
+    set yrange [-3:-1]
+    set label sprintf("A%ds gauge", ig) at 2,-2 center font ",24"
+    plot '+'
+    unset label
+}
+
+set border
 do for [gt=1:2] {
     do for [ig=1:sitetype] {
         do for [it=1:2] {
             do for [is=1:sitetype] {
                 unset tics
                 unset key
-                print(originy(gt,ig,it,is))
                 set origin originx(gt,ig,it,is),originy(gt,ig,it,is)
-                set size square smatx,smaty
-                set xrange [-2:-1]
-                set yrange [1:2]
+                set size smatx,smaty
+                set margins 0,0,0,0
+                set xrange [0.5:32.5]
+                set yrange [0.5:32.5]
                 plot '+'
             }
         }
@@ -51,5 +88,3 @@ do for [gt=1:2] {
 
 unset multiplot
 unset output
-
-pause -1
