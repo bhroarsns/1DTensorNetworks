@@ -1,4 +1,4 @@
-target = "Hubbard/U=10.0/iTEBD/mpslen=2/D=32/seed=10"
+target = "2024-06-11/Hubbard/U=0.0/iTEBD/mpslen=2/D=32/seed=10/initΔτ=0.1"
 outfile = "./tex/".target."/spectrum.tex"
 sfile = "snapshots/".target."/Spec/FUN/AB_left_sym.dat"
 afile = "snapshots/".target."/Spec/FUN/AB_left_asym.dat"
@@ -11,7 +11,7 @@ complex(x,y) = x*{1,0}+y*{0,1}
 
 set xlabel 'TEBD steps'
 set ylabel 'Transfer Matrix Eigenvalues'
-set xrange [0:500]
+set xrange [0:1000]
 unset key
 
 set yrange [0:2]
