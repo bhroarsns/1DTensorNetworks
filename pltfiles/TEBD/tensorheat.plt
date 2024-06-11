@@ -1,7 +1,7 @@
 target = "2024-06-11/Hubbard/U=0.0/iTEBD/mpslen=2/D=32/seed=10/initΔτ=0.1"
 sitetype = 4
 
-filename(gt,ig,it,is) = sprintf("./snapshotdir/%s/%c%s%d.dat", target, 64+it, gt == 1 ? "s" : "sd", ig)
+filename(gt,ig,it,is) = sprintf("./snapshots/%s/%c%s%d_%d.dat", target, 64+it, gt == 1 ? "s" : "sd", ig, is)
 
 # 各行列のサイズを1×1とする
 # 行列間の余白幅をmとする
@@ -29,7 +29,7 @@ originx(gt,ig,it,is) = MP * smarx + (ig - 1) * (sgaux + MP * smarx) + (is - 1) *
 originy(gt,ig,it,is) = MP * smary + (2 - gt) * (sgauy + MP * smary) + (2 - it) * (smaty + smary)
 
 set term png size xsize,ysize
-set output "heat.png"
+set output "./plots/".target."/heat.png"
 
 set multiplot
 
@@ -78,9 +78,21 @@ do for [gt=1:2] {
                 set origin originx(gt,ig,it,is),originy(gt,ig,it,is)
                 set size smatx,smaty
                 set margins 0,0,0,0
-                set xrange [0.5:32.5]
-                set yrange [0.5:32.5]
-                plot '+'
+                file = filename(gt,ig,it,is)
+                DAB = system("awk 'NR==1{print $1}' ".file) + 0.0
+                DBA = system("awk 'NR==1{print $2}' ".file) + 0.0
+                totsize = DAB * DBA
+                set xrange [0.5:(DAB+0.5)]
+                set yrange [0.5:(DBA+0.5)]
+                array XC[totsize]
+                array YC[totsize]
+                array ZC[totsize]
+                stats filename(gt,ig,it,is) every ::1 u (XC[$0+1] = $1, YC[$0+1] = $2, ZC[$0+1] = $3) nooutput
+                unset cbtics
+                set cbrange [0:1]
+                unset colorbox
+                plot ZC u (XC[$1]):(YC[$1]):(ZC[$1]) sparse matrix=(DAB,DBA) origin=(1,1) with image
+                # plot '+'
             }
         }
     }
