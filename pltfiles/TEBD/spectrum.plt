@@ -1,4 +1,4 @@
-target = "2024-06-11/Hubbard/U=0.0/iTEBD/mpslen=2/D=32/seed=10/initΔτ=0.1"
+target = system("echo $TARGET")
 outfile = "./tex/".target."/spectrum.tex"
 sfile = "snapshots/".target."/Spec/FUN/AB_left_sym.dat"
 afile = "snapshots/".target."/Spec/FUN/AB_left_asym.dat"

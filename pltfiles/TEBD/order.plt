@@ -1,5 +1,5 @@
 set term png
-target = "2024-06-11/Hubbard/U=0.0/iTEBD/mpslen=2/D=32/seed=10/initΔτ=0.1"
+target = system("echo $TARGET")
 
 set xrange [0:0.5]
 set logscale y

@@ -1,4 +1,4 @@
-target = "2024-06-12/Hubbard/U=0.0/iTEBD/mpslen=2/D=16/seed=20/initΔτ=0.1/Mirror"
+target = system("echo $TARGET")
 sitetype = 4
 
 filename(gt,ig,it,is) = sprintf("./snapshots/%s/%c%s%d_%d.dat", target, 64+it, gt == 1 ? "s" : "sd", ig, is)

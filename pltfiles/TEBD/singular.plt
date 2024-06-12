@@ -1,4 +1,4 @@
-target = "2024-06-05/Hubbard/U=0.0/iTEBD/mpslen=2/D=16/seed=20/initΔτ=0.1"
+target = system("echo $TARGET")
 sitetype = 4
 # titlestr = system("echo ".target." | sed 's|\/|, |g' | sed 's|1_2|1\/2|' | sed 's|_|\ |g'")
 filename(is, it) = sprintf("./snapshots/%s/%c%d.dat", target, 65+it, is)
