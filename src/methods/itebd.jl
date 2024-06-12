@@ -117,12 +117,13 @@ function doiTEBD(
             normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
-            println(", total:", diff)
+            @printf ", total: %.16e" diff
             measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
         end
         β += Δτ * istep
         totsteps += istep
         Δτ /= 2.0
+        println("")
     end
     println("\r", modelname, ": finished")
 
