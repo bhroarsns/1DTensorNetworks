@@ -16,7 +16,7 @@ set xrange [0:1000]
 unset key
 
 set yrange [0:2]
-plot for [i=1:16] sfile u 0:(abs(complex(column(2*i),column(2*i+1)))) w l lc 1, for [i=1:16] afile u 0:(abs(complex(column(2*i),column(2*i+1)))) w l lc 2
+plot for [i=1:16] sfile u 0:(abs(complex(column(2*i),column(2*i+1)))) w l lc 1 lw 3, for [i=1:16] afile u 0:(abs(complex(column(2*i),column(2*i+1)))) w l lc 2 lw 2
 
 # set yrange [0:1]
 # plot for [i=1:31] file u 0:(abs(complex(column(2*i+1),column(2*i+2)))/abs(complex(column(1),column(2)))) w l
