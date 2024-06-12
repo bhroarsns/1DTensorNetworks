@@ -1,5 +1,5 @@
 reset
-set term png
+set term png 640,480
 target = system("echo $TARGET")
 
 set xrange [0:0.5]
