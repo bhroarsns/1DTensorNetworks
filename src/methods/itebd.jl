@@ -72,8 +72,7 @@ function doiTEBD(
     mpslen::Int=length(originalinds),
     singlesite::Union{ITensor,Nothing}=nothing,
     obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing,
-    initType="",
-    normCond=(_,_,_)->true
+    initType=""
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)"*(!isempty(initType) ? "/$(initType)" : "")
     resultdir, snapshotdir = setupDir(target)
@@ -106,19 +105,15 @@ function doiTEBD(
             istep += 1
             curstep = totsteps + istep
             print("\r", curstep, ", ", Δτ)
-            errU = update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
+            update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
             if !isnothing(sgate)
-                if normCond(istep,errU,"BSU")
-                    normalize!(mps; opr=(step=curstep, methodcall="", state="BSN"), ssio=genssio(snapshotdir))
-                end
+                normalize!(mps; opr=(step=curstep, methodcall="", state="BSN"), ssio=genssio(snapshotdir))
                 update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="", state="FUU"), ssio=genssio(snapshotdir))
             end
-            if normCond(istep,errU,"FUU")
-                normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
-                diff, prevsv = compareSV(mps, prevsv)
-                printSV(snapshotdir, prevsv)
-                @printf ", total: %.16e" diff
-            end
+            normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
+            diff, prevsv = compareSV(mps, prevsv)
+            printSV(snapshotdir, prevsv)
+            @printf ", total: %.16e" diff
             measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
         end
         β += Δτ * istep

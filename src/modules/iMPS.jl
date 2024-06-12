@@ -601,10 +601,10 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     end
     mps.siteTensors[mod(lastsite, 1:mpslen)] = Θ
 
-    Θnew, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
-    errU = norm(Θorg - Θnew) / norm(Θorg)
     let (errUIO, prefix) = ssio(nopr, "errU")
         if !isnothing(errUIO)
+            Θnew, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
+            errU = norm(Θorg - Θnew) / norm(Θorg)
             println(errUIO, prefix..., errU)
             flush(errUIO)
         end
@@ -614,18 +614,17 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     mps.siteTensors[firstsite] = lbwinv * mps.siteTensors[firstsite]
     takeSnapshot(mps; nopr, ssio)
 
-    return errU
+    return nothing
 end
 
 function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
     nopr = merge(opr, (methodcall="$(opr.methodcall)update!,",))
-    errU = 0.0
     for firstsite in 1:mps.length
-        errU = max(update!(mps, gate, originalinds, firstsite; opr=merge(nopr, (fs="$(sitename(mps,firstsite))",)), ssio, svcutoff, newbonddim), errU)
+        update!(mps, gate, originalinds, firstsite; opr=merge(nopr, (fs="$(sitename(mps,firstsite))",)), ssio, svcutoff, newbonddim)
     end
 
     takeSnapshot(mps; nopr, ssio)
-    return errU
+    return nothing
 end
 
 function randomInfiniteMPS(sitetype::String, bonddim::Int, mpslen::Int=2; seed::Union{Int,Nothing}=nothing)
