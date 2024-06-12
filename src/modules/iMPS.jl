@@ -675,6 +675,26 @@ function randomMirrorInfiniteMPS(sitetype::String, bonddim1::Int, bonddim2::Int=
     return InfiniteMPS([stA, stB], [bwAB, bwBA])
 end
 
+function randomTIInfiniteMPS(sitetype::String, bonddim1::Int, bonddim2::Int=bonddim1; seed::Union{Int,Nothing}=nothing)
+    sA = siteind(sitetype)
+    sB = siteind(sitetype)
+    bABA = Index(bonddim1)
+    bABB = Index(bonddim1)
+    bBAB = Index(bonddim2)
+    bBAA = Index(bonddim1)
+
+    if !isnothing(seed)
+        Random.seed!(seed)
+    end
+
+    stA = randomITensor(bBAA, sA, bABA)
+    stB = replaceinds(stA, [bBAA, sA, bABA], [bABB, sB, bBAB])
+    bwAB = delta(bABA, bABB) / sqrt(bonddim1)
+    bwBA = delta(bBAB, bBAA) / sqrt(bonddim2)
+
+    return InfiniteMPS([stA, stB], [bwAB, bwBA])
+end
+
 function getsitenum(mps::InfiniteMPS, sc::Char)
     sn = sc - 'A' + 1
     if 1 ≤ sn ≤ mps.length
