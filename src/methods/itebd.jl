@@ -71,7 +71,8 @@ function doiTEBD(
     seed::Int;
     mpslen::Int=length(originalinds),
     singlesite::Union{ITensor,Nothing}=nothing,
-    obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing
+    obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing,
+    usemirror=false
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)"
     resultdir, snapshotdir = setupDir(target)
@@ -81,7 +82,7 @@ function doiTEBD(
 
     β = 0.0
     totsteps = 0
-    mps = randomInfiniteMPS(sitetype, D, mpslen; seed)
+    mps = usemirror && (mpslen == 2) ? randomMirrorInfiniteMPS(sitetype, D; seed) : randomInfiniteMPS(sitetype, D, mpslen; seed)
     normalize!(mps; opr=(step=0, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
     prevsv = tensorSV(mps)
     printSV(snapshotdir, prevsv)
