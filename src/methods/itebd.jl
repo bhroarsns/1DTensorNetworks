@@ -72,9 +72,9 @@ function doiTEBD(
     mpslen::Int=length(originalinds),
     singlesite::Union{ITensor,Nothing}=nothing,
     obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing,
-    usemirror=false
+    symmetry=""
 )
-    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)"*(usemirror && (mpslen == 2) ? "/Mirror" : "")
+    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)"*(!isempty(symmetry) && (mpslen == 2) ? "/$(symmetry)" : "")
     resultdir, snapshotdir = setupDir(target)
     open("$(resultdir)/energy.dat", "w") do io
         println(io, "# D=$(D), seed=$(seed)")
@@ -82,7 +82,18 @@ function doiTEBD(
 
     β = 0.0
     totsteps = 0
-    mps = usemirror && (mpslen == 2) ? randomMirrorInfiniteMPS(sitetype, D; seed) : randomInfiniteMPS(sitetype, D, mpslen; seed)
+    mps = if !isempty(symmetry) && (mpslen == 2)
+        if symmetry == "Mirror"
+            randomMirrorInfiniteMPS(sitetype, D; seed)
+        elseif symmetry == "TI"
+            randomTIInfiniteMPS(sitetype, D; seed)
+        else
+            randomInfiniteMPS(sitetype, D; seed)
+        end
+    else
+        randomInfiniteMPS(sitetype, D, mpslen; seed)
+    end
+
     normalize!(mps; opr=(step=0, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
     prevsv = tensorSV(mps)
     printSV(snapshotdir, prevsv)
