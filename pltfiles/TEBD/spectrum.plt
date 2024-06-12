@@ -1,3 +1,4 @@
+reset
 target = system("echo $TARGET")
 outfile = "./tex/".target."/spectrum.tex"
 sfile = "snapshots/".target."/Spec/FUN/AB_left_sym.dat"

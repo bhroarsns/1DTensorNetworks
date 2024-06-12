@@ -1,3 +1,4 @@
+reset
 target = system("echo $TARGET")
 sitetype = 4
 

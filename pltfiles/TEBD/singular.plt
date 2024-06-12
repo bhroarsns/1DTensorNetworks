@@ -1,3 +1,4 @@
+reset
 target = system("echo $TARGET")
 sitetype = 4
 # titlestr = system("echo ".target." | sed 's|\/|, |g' | sed 's|1_2|1\/2|' | sed 's|_|\ |g'")
