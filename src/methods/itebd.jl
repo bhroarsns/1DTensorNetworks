@@ -72,7 +72,8 @@ function doiTEBD(
     mpslen::Int=length(originalinds),
     singlesite::Union{ITensor,Nothing}=nothing,
     obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing,
-    initType=""
+    initType="",
+    maxstep::Union{Int,Nothing}=nothing
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)"*(!isempty(initType) ? "/$(initType)" : "")
     resultdir, snapshotdir = setupDir(target)
@@ -104,6 +105,10 @@ function doiTEBD(
         while diff > 1.0e-10
             istep += 1
             curstep = totsteps + istep
+            if !isnothing(maxstep) && curstep > maxstep
+                println("\r", modelname, ": interrupted")
+                @goto end_of_loop
+            end
             print("\r", curstep, ", ", Δτ)
             update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
             if !isnothing(sgate)
@@ -121,6 +126,7 @@ function doiTEBD(
         Δτ /= 2.0
         println("")
     end
+    @label end_of_loop
     println("\r", modelname, ": finished")
 
     f = h5open("./$(snapshotdir)/mps.h5", "w")

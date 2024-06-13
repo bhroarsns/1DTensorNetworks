@@ -27,7 +27,7 @@ function hamiltonian(; U::Float64, μ::Float64=U / 2.0)
     return modelname, hloc, orginds, singlesite, hbond
 end
 
-function executeTEBD(seed::Int, initΔτ::Float64, D::Int; U::Float64, μ::Float64=U / 2.0, initType="", mpslen=2)
+function executeTEBD(seed::Int, initΔτ::Float64, D::Int; U::Float64, μ::Float64=U / 2.0, initType="", mpslen=2, maxstep::Union{Int,Nothing}=nothing)
     modelname, hloc, orginds, singlesite, hbond = hamiltonian(; U, μ)
     doiTEBD(
         modelname,
@@ -44,7 +44,8 @@ function executeTEBD(seed::Int, initΔτ::Float64, D::Int; U::Float64, μ::Float
             (op("n↑", orginds[begin]), [orginds[begin]]),
             (op("n↓", orginds[begin]), [orginds[begin]]),
         ],
-        initType)
+        initType,
+        maxstep)
     return nothing
 end
 

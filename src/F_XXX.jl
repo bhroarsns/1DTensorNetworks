@@ -10,9 +10,9 @@ function hamiltonian(sitetype)
     return modelname, real(hloc), orginds
 end
 
-function executeTEBD()
+function executeTEBD(seed::Int, initΔτ::Float64, D::Int; initType="", mpslen=2, maxstep::Union{Int,Nothing}=nothing)
     modelname, hloc, orginds = hamiltonian("S=1/2")
-    doiTEBD(modelname, hloc, orginds, "S=1/2", [(0.1, 500)], 16, 10)
+    doiTEBD(modelname, hloc, orginds, "S=1/2", initΔτ, D, seed; mpslen, initType, maxstep)
     return nothing
 end
 
