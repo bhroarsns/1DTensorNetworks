@@ -5,3 +5,4 @@ tex
 log*
 src/test*
 test*
+slurm*
