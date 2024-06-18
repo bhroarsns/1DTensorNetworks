@@ -670,7 +670,7 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
                 break
             end
         end
-        print(", ", length(spec.eigs), "->", truebonddim, "(", bonddim, ")")
+        # print(", ", length(spec.eigs), "->", truebonddim, "(", bonddim, ")")
         bonddim = truebonddim
         bonddim = min(count(>(svcutoff^2), spec.eigs), bonddim)
 
