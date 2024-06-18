@@ -6,5 +6,5 @@ files = split(files, "\n")
 nfile = |files|
 
 set output "./plots/".target."/corr.png"
-plot for [i = 1:nfile] sprintf("./snapshots/%s/Corr/%s", target, files[i]) u 1:2
+plot for [i = 1:nfile] sprintf("./snapshots/%s/Corr/%s", target, files[i]) u 1:2 w l title system("echo ".files[i]." | sed s/.dat//g")
 unset output
