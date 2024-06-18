@@ -117,7 +117,7 @@ function doiTEBD(
                 update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="", state="FUU"), ssio=genssio(snapshotdir))
             end
             normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
-            correlation(mps; ssio=genssio(snapshotdir))
+            correlation(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
             @printf ", total: %.16e" diff
