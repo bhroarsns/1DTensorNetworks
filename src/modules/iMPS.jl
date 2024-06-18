@@ -583,7 +583,7 @@ function correlation(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::F
     sts = divideBondWeights(mps)
     for it in 1:mps.length, (is1, is2) in eachSiteCombination(mps, it)
         tname = sitename(mps, it)
-        let (corrIO, prefix) = ssio(merge(nopr, (pair="$(tname)$(is1[2])-$(tname)$(is2[2])")), "corr")
+        let (corrIO, prefix) = ssio(merge(nopr, (pair="$(tname)$(is1[2])-$(tname)$(is2[2])"),), "corr")
             if !isnothing(corrIO)
                 print(corrIO, prefix...)
                 println(corrIO, commutator(sts, it, is1, it, is2))
@@ -593,7 +593,7 @@ function correlation(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::F
     end
     if mps.length == 2
         for (is1, is2) in eachSiteCombination(mps, 1, 2)
-            let (corrIO, prefix) = ssio(merge(nopr, (pair="A$(is1[2])-B$(is2[2])")), "corr")
+            let (corrIO, prefix) = ssio(merge(nopr, (pair="A$(is1[2])-B$(is2[2])"),), "corr")
                 if !isnothing(corrIO)
                     print(corrIO, prefix...)
                     println(corrIO, commutator(sts, 1, is1, 2, is2))
@@ -606,7 +606,7 @@ function correlation(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::F
             tname1 = sitename(mps, it)
             tname2 = sitename(mps, it + 1)
             for (is1, is2) in eachSiteCombination(mps, 1, 2)
-                let (corrIO, prefix) = ssio(merge(nopr, (pair="$(tname1)$(is1[2])-$(tname2)$(is2[2])")), "corr")
+                let (corrIO, prefix) = ssio(merge(nopr, (pair="$(tname1)$(is1[2])-$(tname2)$(is2[2])"),), "corr")
                     if !isnothing(corrIO)
                         print(corrIO, prefix...)
                         println(corrIO, commutator(sts, it, is1, mod(it + 1, 1:mps.length), is2))
