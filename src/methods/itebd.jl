@@ -75,7 +75,8 @@ function doiTEBD(
     singlesite::Union{ITensor,Nothing}=nothing,
     obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing,
     initType="",
-    maxstep::Union{Int,Nothing}=nothing
+    maxstep::Union{Int,Nothing}=nothing,
+    verbose=true
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)"*(!isempty(initType) ? "/$(initType)" : "")
     resultdir, snapshotdir = setupDir(target)
@@ -108,10 +109,14 @@ function doiTEBD(
             istep += 1
             curstep = totsteps + istep
             if !isnothing(maxstep) && curstep > maxstep
-                println("\r", modelname, ": interrupted")
+                if verbose
+                    println("\r", modelname, ": interrupted")
+                end
                 @goto end_of_loop
             end
-            print("\r", curstep, ", ", Δτ)
+            if verbose
+                print("\r", curstep, ", ", Δτ)
+            end
             update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
             if !isnothing(sgate)
                 normalize!(mps; opr=(step=curstep, methodcall="", state="BSN"), ssio=genssio(snapshotdir))
@@ -121,13 +126,17 @@ function doiTEBD(
             correlation(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
-            @printf ", total: %.16e" diff
+            if verbose
+                @printf ", total: %.16e" diff
+            end
             measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
         end
         β += Δτ * istep
         totsteps += istep
         Δτ /= 2.0
-        println("")
+        if verbose
+            println("")
+        end
     end
     @label end_of_loop
     println("\r", modelname, ": finished")
