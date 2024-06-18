@@ -41,6 +41,7 @@ function genssio(snapshotdir::String)
         # ssname == "errΘ" && return open("$(snapshotdir)/Err/$(opr.state)/errΘ.dat", "a"), (opr.step, ", ")
         # ssname == "errC" && return open("$(snapshotdir)/Err/$(opr.state)/errC.dat", "a"), (opr.step, ", ")
         ssname == "errU" && return open("$(snapshotdir)/Err/$(opr.state)/errU.dat", "a"), (opr.step, ", ", opr.fs, ", ")
+        ssname == "corr" && return open("$(snapshotdir)/$(opr.pair).dat", "a"), (opr.step, ", ")
         startswith(ssname, "uspec") && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.fs)_$(opr.bond).dat", "a"), (opr.step, ", ")
         # if (opr.methodcall == "normalize!,") || (opr.methodcall == "update!,")
         #     startswith(ssname, "st") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w"), ""
@@ -116,6 +117,7 @@ function doiTEBD(
                 update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="", state="FUU"), ssio=genssio(snapshotdir))
             end
             normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
+            correlation(mps; ssio=genssio(snapshotdir))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
             @printf ", total: %.16e" diff
