@@ -124,7 +124,7 @@ function doiTEBD(
                 print("\r", curstep, ", ", Δτ)
             end
             mkpathINE("$(snapshotdir)/Step/$(curstep)/BSU")
-            update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
+            @time update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
             if !isnothing(sgate)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
@@ -132,14 +132,14 @@ function doiTEBD(
                 update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="", state="FUU"), ssio=genssio(snapshotdir))
             end
             mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
-            normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
+            @time normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
             correlation(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
             if verbose
                 @printf ", total: %.16e" diff
             end
-            measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
+            @time measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
         end
         β += Δτ * istep
         totsteps += istep
@@ -157,43 +157,6 @@ function doiTEBD(
         write(f, "$(bondname(mps, isite))", mps.bondWeights[isite])
     end
     close(f)
-
-    # El, _, llink, _ = transfermatrix(mps, 1)
-    # leftInds = uniqueinds(El, [llink, llink'])
-    # P, Pinv, Q, Qinv, indsym, indasym = symprojector(llink, llink')
-    # symtm = P * El * replaceinds(Pinv, [llink, llink'], leftInds)
-    # asymtm = Q * El * replaceinds(Qinv, [llink, llink'], leftInds)
-    # open("$(snapshotdir)/tm.dat", "w") do io
-    #     println(io, dim(llink), ", ", dim(llink'), ", ", dim(leftInds[1]), ", ", dim(leftInds[2]))
-    #     for il1 in eachval(llink)
-    #         for il2 in eachval(llink')
-    #             for ir1 in eachval(leftInds[1])
-    #                 for ir2 in eachval(leftInds[2])
-    #                     entry = El[llink=>il1, llink'=>il2, leftInds[1]=>ir1, leftInds[2]=>ir2]
-    #                     println(io, il1, ", ", il2, ", ", ir1, ", ", ir2, ", ", il1 + dim(llink) * (il2 - 1), ", ", ir1 + dim(leftInds[1]) * (ir2 - 1), ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
-    #                 end
-    #             end
-    #         end
-    #     end
-    # end
-    # open("$(snapshotdir)/symtm.dat", "w") do io
-    #     println(io, dim(indsym), ", ", dim(indsym'))
-    #     for is1 in eachval(indsym)
-    #         for is2 in eachval(indsym')
-    #             entry = symtm[indsym=>is1, indsym'=>is2]
-    #             println(io, is1, ", ", is2, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
-    #         end
-    #     end
-    # end
-    # open("$(snapshotdir)/asymtm.dat", "w") do io
-    #     println(io, dim(indasym), ", ", dim(indasym'))
-    #     for ia1 in eachval(indasym)
-    #         for ia2 in eachval(indasym')
-    #             entry = asymtm[indasym=>ia1, indasym'=>ia2]
-    #             println(io, ia1, ", ", ia2, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
-    #         end
-    #     end
-    # end
 
     return nothing
 end
