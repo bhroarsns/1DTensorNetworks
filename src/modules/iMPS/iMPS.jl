@@ -86,6 +86,12 @@ include("sv.jl")
 include("correlation.jl")
 include("alias.jl")
 
+if !@isdefined ssio
+    function ssio(_::Dict{String,String}, _::String)
+        return nothing, ""
+    end
+end
+
 # function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
 #     for isite in 1:mps.length
 #         let (stIO, prefix) = ssio(nopr, "st:$(sitename(mps, isite))")

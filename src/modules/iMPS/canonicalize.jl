@@ -1,7 +1,7 @@
-function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0)
-    nopr = merge(opr, (methodcall="$(opr.methodcall)canonicalize!,",))
+function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0)
+    nopr = mergewith(*, opr, Dict("methodcall" => "canonicalize!,"))
     mpslen = mps.length
-    Dl, Ul, ll, Dr, Ur, lr, el, λ = environment(mps, bondnum; opr=nopr, ssio)
+    Dl, Ul, ll, Dr, Ur, lr, el, λ = environment(mps, bondnum; opr=nopr)
 
     bl, br, bw = bond(mps, bondnum)
     bn = bondname(mps, bondnum)
@@ -27,7 +27,7 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodca
 
     let (errCanon, prefix) = ssio(nopr, "errC")
         if !isnothing(errCanon)
-            El, Er, llink, rlink = transfermatrix(mps, bondnum; opr=nopr, ssio)
+            El, Er, llink, rlink = transfermatrix(mps, bondnum; opr=nopr)
             println(errCanon, prefix..., norm(El * δ(llink, llink') - λ * δ(uniqueinds(El, [llink, llink'])...)), ", ", norm(Er * δ(rlink, rlink') - λ * δ(uniqueinds(Er, [rlink, rlink'])...)))
             flush(errCanon)
         end
@@ -36,26 +36,26 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::NamedTuple=(methodca
     return λ
 end
 
-function canonicalizeAll!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0)
-    nopr = merge(opr, (methodcall="$(opr.methodcall)canonicalizeAll!,",))
+function canonicalizeAll!(mps::InfiniteMPS; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0)
+    nopr = mergewith(*, opr, Dict("methodcall" => "canonicalizeAll!,"))
     λs = Vector{Complex}(undef, mps.length)
     for ibond in eachindex(λs)
-        λ = canonicalize!(mps, ibond; opr=merge(nopr, (bond=bondname(mps, ibond),)), ssio, svcutoff)
+        λ = canonicalize!(mps, ibond; opr=merge(nopr, Dict("bond" => bondname(mps, ibond))), svcutoff)
         λs[ibond] = λ
     end
     return λs
 end
 
-function normalize!(mps::InfiniteMPS; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0)
-    nopr = merge(opr, (methodcall="$(opr.methodcall)normalize!,",))
-    λs = canonicalizeAll!(mps; opr=nopr, ssio, svcutoff)
-    divider = sqrt(sum(abs.(λs)) / length(λs))
+function normalize!(mps::InfiniteMPS; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0)
+    nopr = mergewith(*, opr, Dict("methodcall" => "normalize!,"))
+    λs = canonicalizeAll!(mps; opr=nopr, svcutoff)
+    divider = sqrt(sum(abs.(λs)) / float(length(λs)))
     for ibond in eachindex(mps.bondWeights)
         bwnorm = norm(mps.bondWeights[ibond])
         divider /= bwnorm
         mps.bondWeights[ibond] /= bwnorm
     end
-    divider ^= (1 / mps.length)
+    divider ^= (1.0 / float(mps.length))
 
     for isite in eachindex(mps.siteTensors)
         mps.siteTensors[isite] /= divider

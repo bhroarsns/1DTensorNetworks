@@ -1,11 +1,11 @@
-function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
-    nopr = merge(opr, (methodcall="$(opr.methodcall)transfermatrix,",))
+function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; opr::Dict{String,String}=Dict{String,String}())
+    nopr = mergewith(*, opr, Dict("methodcall" => "transfermatrix,"))
     bn1 = bondname(mps, bondnum1)
     bn2 = bondname(mps, bondnum2)
-    minket1, lbw, rbw, lb, rb = contractKet(mps, bondnum1 + 1, bondnum1; minketonly=true)
+    minket1, lbw, rbw, lb, rb = contractKet(mps, bondnum1 + 1, bondnum1; minketonly=true, opr=nopr)
     minket2 = minket1
     if (bondnum2 - bondnum1) % mps.length != 0
-        minket2, _, rbw, _, rb = contractKet(mps, bondnum2 + 1, bondnum2; minketonly=true)
+        minket2, _, rbw, _, rb = contractKet(mps, bondnum2 + 1, bondnum2; minketonly=true, opr=nopr)
     end
 
     llink = replacetags(lb, "Bond", "TMLink")
@@ -55,7 +55,7 @@ function symprojector(ind1::Index{Int}, ind2::Index{Int})
     return P, Pinv, Q, Qinv, indsym, indasym
 end
 
-function sortSpectrum(tm::ITensor, proj::ITensor; notop=false, toponly=false, opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
+function sortSpectrum(tm::ITensor, proj::ITensor; notop=false, toponly=false, opr::Dict{String,String}=Dict{String,String}())
     D, P, spec, _, e = eigen(tm)
     eigs = spec.eigs
     indord = sortperm(eigs; by=eig -> abs(eig), rev=true)
@@ -90,8 +90,8 @@ function sortSpectrum(tm::ITensor, proj::ITensor; notop=false, toponly=false, op
     end
 end
 
-function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
-    nopr = merge(opr, (methodcall="$(opr.methodcall)fixedpoint,",))
+function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Dict{String,String}=Dict{String,String}())
+    nopr = mergewith(*, opr, Dict("methodcall" => "fixedpoint,"))
     inds1 = [linkind, linkind']
     inds2 = uniqueinds(tm, inds1)
 
@@ -99,12 +99,12 @@ function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Name
     symtm = PS * real(tm) * replaceinds(PSinv, inds1, inds2)
 
     if !decomposed
-        return sortSpectrum(symtm, PS; toponly=true, nopr, ssio)
+        return sortSpectrum(symtm, PS; toponly=true, nopr)
     end
 
     asymtm = PA * real(tm) * replaceinds(PAinv, inds1, inds2)
-    sFPs, v, sλ = sortSpectrum(symtm, PS; opr=merge(nopr, (sector="sym",)), ssio)
-    aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, (sector="asym",)), ssio)
+    sFPs, v, sλ = sortSpectrum(symtm, PS; opr=merge(nopr, Dict("sector" => "sym")))
+    aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
 
     degenFP = if sλ ≈ aλ
         Iterators.flatten(zip(sFPs, aFPs))
@@ -142,16 +142,16 @@ function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Name
     return D, U, e, sλ
 end
 
-function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; decomposed=true, opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
-    nopr = merge(opr, (methodcall="$(opr.methodcall)environment,",))
-    El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2; opr=nopr, ssio)
+function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; decomposed=true, opr::Dict{String,String}=Dict{String,String}())
+    nopr = mergewith(*, opr, Dict("methodcall" => "environment,"))
+    El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2; opr=nopr)
     if decomposed
-        Dl, Ul, el, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, (side="left",)), ssio)
-        Dr, Ur, _, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, (side="right",)), ssio)
+        Dl, Ul, el, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
+        Dr, Ur, _, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
         return Dl, Ul, ll, Dr, Ur, lr, el, (λl + λr) / 2.0
     else
-        σ, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, (side="left",)), ssio)
-        μ, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, (side="right",)), ssio)
+        σ, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
+        μ, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
         return σ, ll, μ, lr, (λl + λr) / 2.0
     end
 end

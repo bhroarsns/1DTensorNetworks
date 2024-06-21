@@ -1,5 +1,5 @@
-function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
-    nopr = merge(opr, (methodcall="$(opr.methodcall)update!,",))
+function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+    nopr = mergewith(*, opr, Dict("methodcall" => "update!,"))
     mpslen = mps.length
     gatelen = length(originalinds)
     if gatelen > mpslen
@@ -15,7 +15,7 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
     end
 
     lastsite = firstsite + gatelen - 1
-    minket, lbw, rbw, lbl, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
+    minket, lbw, rbw, lbl, _ = contractKet(mps, firstsite, lastsite; minketonly=true, opr=nopr)
     ketinds = uniqueinds(minket, lbw, rbw)
 
     tmp = sim(lbl)
@@ -30,7 +30,7 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
         _, bi = bondInds(mps, ibond)
         U, _, V, spec, linku, linkv = svd(Θ, [tmp, ketinds[begin+ibond-firstsite]])
 
-        let (specUIO, prefix) = ssio(merge(nopr, (bond=bn,)), "uspec:$(bn)")
+        let (specUIO, prefix) = ssio(merge(nopr, Dict("bond" => bn)), "uspec:$(bn)")
             if !isnothing(specUIO)
                 print(specUIO, prefix...)
                 foreach(γ -> print(specUIO, sqrt(γ), ", "), spec.eigs)
@@ -51,6 +51,13 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
         bonddim = truebonddim
         bonddim = min(count(>(svcutoff^2), spec.eigs), bonddim)
 
+        let (errUIO, prefix) = ssio(nopr, "errU")
+            if !isnothing(errUIO)
+                println(errUIO, prefix..., sum(spec.eigs[1:bonddim]), ", ", sum(spec.eigs))
+                flush(errUIO)
+            end
+        end
+
         Σ = sqrt.(spec.eigs[1:bonddim])
         newu = Index(bonddim, "Bond,$(bn),$(bn[1])")
         tmp = Index(bonddim, "Bond,$(bn),$(bn[2])")
@@ -58,27 +65,17 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
         mps.bondWeights[mod(ibond, 1:mpslen)] = diagITensor(Σ, newu, tmp)
         Θ = δ(tmp, linkv) * V
     end
-    mps.siteTensors[mod(lastsite, 1:mpslen)] = Θ
-
-    let (errUIO, prefix) = ssio(nopr, "errU")
-        if !isnothing(errUIO)
-            Θnew, _ = contractKet(mps, firstsite, lastsite; minketonly=true)
-            println(errUIO, prefix..., norm(Θorg - Θnew) / norm(Θorg))
-            flush(errUIO)
-        end
-    end
-
-    mps.siteTensors[mod(lastsite, 1:mpslen)] = mps.siteTensors[mod(lastsite, 1:mpslen)] * rbwinv
+    mps.siteTensors[mod(lastsite, 1:mpslen)] = Θ * rbwinv
     mps.siteTensors[firstsite] = lbwinv * mps.siteTensors[firstsite]
 
     return nothing
 end
 
-function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; opr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""), svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
-    nopr = merge(opr, (methodcall="$(opr.methodcall)update!,",))
+function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)
+    nopr = mergewith(*, opr, Dict("methodcall" => "update!,"))
     for firstsite in 1:mps.length
-        update!(mps, gate, originalinds, firstsite; opr=merge(nopr, (fs="$(sitename(mps,firstsite))",)), ssio, svcutoff, newbonddim)
+        update!(mps, gate, originalinds, firstsite; opr=merge(nopr, Dict("fs" => "$(sitename(mps,firstsite))")), svcutoff, newbonddim)
     end
-    
+
     return nothing
 end

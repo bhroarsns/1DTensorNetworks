@@ -1,8 +1,9 @@
-function densitymatrix(mps::InfiniteMPS, dmlen::Int, firstsite::Int; normalized=false)
+function densitymatrix(mps::InfiniteMPS, dmlen::Int, firstsite::Int; normalized=false, opr::Dict{String,String}=Dict{String,String}())
+    nopr = mergewith(*, opr, Dict("methodcall" => "densitymatrix,"))
     lastsite = firstsite + dmlen - 1
 
     if normalized
-        ket, minket, lbw, rbw, lb, _ = contractKet(mps, firstsite, lastsite)
+        ket, minket, lbw, rbw, lb, _ = contractKet(mps, firstsite, lastsite; opr=nopr)
         ketinds = uniqueinds(ket, lbw, rbw)
         tmp = sim(lb)
         lbw = replaceind(lbw, lb, tmp)
@@ -20,7 +21,7 @@ function densitymatrix(mps::InfiniteMPS, dmlen::Int, firstsite::Int; normalized=
         return rawDM / bubble[1], ketinds
     else
         repeatnum = dmlen ÷ mps.length
-        ket, minket, lbw, rbw, lb, rb = contractKet(mps, firstsite, lastsite)
+        ket, minket, lbw, rbw, lb, rb = contractKet(mps, firstsite, lastsite; opr=nopr)
         ketinds = uniqueinds(ket, lbw, rbw)
 
         # σ, μ, ll, lr, λ = environment(mps, firstsite - 1, lastsite)
@@ -43,17 +44,19 @@ function densitymatrix(mps::InfiniteMPS, dmlen::Int, firstsite::Int; normalized=
     end
 end
 
-function expectedvalue(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; normalized=false)
+function expectedvalue(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Index{Int}}, firstsite::Int; normalized=false, opr::Dict{String,String}=Dict{String,String}())
+    nopr = mergewith(*, opr, Dict("methodcall" => "expectedvalue,"))
     oplen = length(originalinds)
-    ρ, ketinds = densitymatrix(mps, oplen, firstsite; normalized)
+    ρ, ketinds = densitymatrix(mps, oplen, firstsite; normalized, opr=nopr)
     ev = ρ * replaceinds(op, [originalinds..., prime.(originalinds)...], [ketinds..., prime.(ketinds)...])
     return ev[1]
 end
 
-function expectedvalues(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Index{Int}}; normalized=false)
+function expectedvalues(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Index{Int}}; normalized=false, opr::Dict{String,String}=Dict{String,String}())
+    nopr = mergewith(*, opr, Dict("methodcall" => "expectedvalues,"))
     evs = Vector{Complex}(undef, mps.length)
     for firstsite in eachindex(evs)
-        evs[firstsite] = expectedvalue(mps, op, originalinds, firstsite; normalized)
+        evs[firstsite] = expectedvalue(mps, op, originalinds, firstsite; normalized, opr=nopr)
     end
     return evs
 end

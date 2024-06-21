@@ -1,5 +1,22 @@
-using Pkg;
-Pkg.activate(".");
+# using Pkg;
+# Pkg.activate(".");
+
+function ssio(opr::Dict{String,String}, ssname::String)
+    # ssname == "errtm" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errtm.dat", "a"), (opr["step"], ", ")
+    # ssname == "errv" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errv_$(opr["side"]).dat", "a"), (opr["step"], ", ")
+    # ssname == "errΘ" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errΘ.dat", "a"), (opr["step"], ", ")
+    # ssname == "errC" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errC.dat", "a"), (opr["step"], ", ")
+    ssname == "errU" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errU.dat", "a"), (opr["step"], ", ", opr["fs"], ", ")
+    ssname == "spec" && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["bond"])_$(opr["side"])_$(opr["sector"]).dat", "a"), (opr["step"], ", ")
+    # ssname == "degenFP" && return open("$(opr["snapshotdir"])/Step/$(opr["step"])/$(opr["state"])/$(opr["bond"])_$(opr["side"])_degenFP.dat", "w"), ""
+    ssname == "corr" && return open("$(opr["snapshotdir"])/Corr/$(opr["pair"]).dat", "a"), (opr["step"], ", ")
+    startswith(ssname, "uspec") && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["fs"])_$(opr["bond"]).dat", "a"), (opr["step"], ", ")
+    # if (opr["methodcall"] == "normalize!,") || (opr["methodcall"] == "update!,")
+    #     startswith(ssname, "st") && return open("$(opr["snapshotdir"])/Step/$(opr["step"])/$(opr["state"])/$(ssname[4:end])", "w"), ""
+    #     startswith(ssname, "bw") && return open("$(opr["snapshotdir"])/Step/$(opr["step"])/$(opr["state"])/$(ssname[4:end])", "w"), ""
+    # end
+    return nothing, ""
+end
 
 include("../modules/iMPS/iMPS.jl")
 include("../modules/util.jl")
@@ -23,25 +40,6 @@ function measurement(resultdir::String, mps::InfiniteMPS, hloc::ITensor, origina
     end
     open("$(resultdir)/energy.dat", "a") do io
         println(io, output)
-    end
-end
-
-function genssio(snapshotdir::String)
-    return (opr::NamedTuple, ssname::String) -> begin
-        # ssname == "errtm" && return open("$(snapshotdir)/Err/$(opr.state)/errtm.dat", "a"), (opr.step, ", ")
-        # ssname == "errv" && return open("$(snapshotdir)/Err/$(opr.state)/errv_$(opr.side).dat", "a"), (opr.step, ", ")
-        # ssname == "errΘ" && return open("$(snapshotdir)/Err/$(opr.state)/errΘ.dat", "a"), (opr.step, ", ")
-        # ssname == "errC" && return open("$(snapshotdir)/Err/$(opr.state)/errC.dat", "a"), (opr.step, ", ")
-        ssname == "errU" && return open("$(snapshotdir)/Err/$(opr.state)/errU.dat", "a"), (opr.step, ", ", opr.fs, ", ")
-        # ssname == "spec" && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.bond)_$(opr.side)_$(opr.sector).dat", "a"), (opr.step, ", ")
-        # ssname == "degenFP" && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(opr.bond)_$(opr.side)_degenFP.dat", "w"), ""
-        ssname == "corr" && return open("$(snapshotdir)/Corr/$(opr.pair).dat", "a"), (opr.step, ", ")
-        startswith(ssname, "uspec") && return open("$(snapshotdir)/Spec/$(opr.state)/$(opr.fs)_$(opr.bond).dat", "a"), (opr.step, ", ")
-        # if (opr.methodcall == "normalize!,") || (opr.methodcall == "update!,")
-        #     startswith(ssname, "st") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w"), ""
-        #     startswith(ssname, "bw") && return open("$(snapshotdir)/Step/$(opr.step)/$(opr.state)/$(ssname[4:end])", "w"), ""
-        # end
-        return nothing, nothing
     end
 end
 
@@ -100,7 +98,7 @@ function doiTEBD(
     end
     mkpathINE("$(snapshotdir)/Step/0/FUN")
 
-    normalize!(mps; opr=(step=0, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
+    normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "", "state" => "FUN"))
     prevsv = tensorSV(mps)
     printSV(snapshotdir, prevsv)
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
@@ -124,22 +122,22 @@ function doiTEBD(
                 print("\r", curstep, ", ", Δτ)
             end
             mkpathINE("$(snapshotdir)/Step/$(curstep)/BSU")
-            @time update!(mps, gate, originalinds; opr=(step=curstep, methodcall="", state="BSU"), ssio=genssio(snapshotdir))
+            update!(mps, gate, originalinds; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSU"))
             if !isnothing(sgate)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
-                normalize!(mps; opr=(step=curstep, methodcall="", state="BSN"), ssio=genssio(snapshotdir))
-                update!(mps, sgate, [originalinds[begin]]; opr=(step=curstep, methodcall="", state="FUU"), ssio=genssio(snapshotdir))
+                normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"))
+                update!(mps, sgate, [originalinds[begin]]; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUU"))
             end
             mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
-            @time normalize!(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
-            correlation(mps; opr=(step=curstep, methodcall="", state="FUN"), ssio=genssio(snapshotdir))
+            normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"))
+            correlation(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
             if verbose
                 @printf ", total: %.16e" diff
             end
-            @time measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
+            measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
         end
         β += Δτ * istep
         totsteps += istep

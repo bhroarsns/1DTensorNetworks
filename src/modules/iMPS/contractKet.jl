@@ -1,4 +1,4 @@
-function contractKet(mps::InfiniteMPS, firstsite::Int, lastsite::Int; minketonly=false)
+function contractKet(mps::InfiniteMPS, firstsite::Int, lastsite::Int; minketonly=false, opr::Dict{String,String}=Dict{String,String}())
     mpslen = mps.length
     ifirst = mod(firstsite, 1:mpslen)
     ilast = mod(lastsite, ifirst:ifirst+mpslen-1)
@@ -6,7 +6,7 @@ function contractKet(mps::InfiniteMPS, firstsite::Int, lastsite::Int; minketonly
     lbl, lbr, lbw = bond(mps, ifirst - 1)
     rbl, rbr, rbw = bond(mps, ilast)
 
-    minket = deepcopy(siteTensor(mps, ifirst))
+    minket :: ITensor = deepcopy(siteTensor(mps, ifirst))
     for isite in ifirst+1:ilast
         minket = minket * bondWeight(mps, isite - 1) * siteTensor(mps, isite)
     end
