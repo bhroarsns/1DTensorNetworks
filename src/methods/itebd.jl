@@ -1,5 +1,5 @@
-# using Pkg;
-# Pkg.activate(".");
+using Pkg;
+Pkg.activate(".");
 
 function ssio(opr::Dict{String,String}, ssname::String)
     # ssname == "errtm" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errtm.dat", "a"), (opr["step"], ", ")
