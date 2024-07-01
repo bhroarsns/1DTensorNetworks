@@ -70,7 +70,7 @@ end
 
 function normalize!(mps::InfiniteMPS; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0, parallel=true)
     nopr = mergewith(*, opr, Dict("methodcall" => "normalize!,"))
-    @time λs = canonicalizeAll!(mps; opr=nopr, svcutoff, parallel)
+    λs = canonicalizeAll!(mps; opr=nopr, svcutoff, parallel)
     divider = sqrt(sum(abs.(λs)) / float(length(λs)))
     for ibond in eachindex(mps.bondWeights)
         bwnorm = norm(mps.bondWeights[ibond])
