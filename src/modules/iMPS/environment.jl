@@ -142,9 +142,8 @@ function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Dict
     # aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
 
     symtask = Threads.@spawn sortSpectrum(symtm, PS; opr=merge(nopr, Dict("sector" => "sym")))
-    asymtask = Threads.@spawn sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
+    aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
     sFPs, v, sλ = fetch(symtask)
-    aFPs, aλ = fetch(asymtask)
 
     degenFP = if sλ ≈ aλ
         Iterators.flatten(zip(sFPs, aFPs))
@@ -189,17 +188,15 @@ function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; de
         # Dl, Ul, el, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
         # Dr, Ur, _, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
         lefttask = Threads.@spawn fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
-        righttask = Threads.@spawn fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        Dr, Ur, _, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
         Dl, Ul, el, λl = fetch(lefttask)
-        Dr, Ur, _, λr = fetch(righttask)
         return Dl, Ul, ll, Dr, Ur, lr, el, (λl + λr) / 2.0
     else
         # σ, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
         # μ, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
         lefttask = Threads.@spawn fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
-        righttask = Threads.@spawn fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        μ, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
         σ, λl = fetch(lefttask)
-        μ, λr = fetch(righttask)
         return σ, ll, μ, lr, (λl + λr) / 2.0
     end
 end
