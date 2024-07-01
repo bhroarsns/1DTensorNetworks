@@ -129,11 +129,11 @@ function doiTEBD(
             if !isnothing(sgate)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
-                normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"); parallel)
+                normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"), parallel)
                 update!(mps, sgate, [originalinds[begin]]; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUU"))
             end
             mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
-            normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"); parallel)
+            normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"), parallel)
             correlation(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
