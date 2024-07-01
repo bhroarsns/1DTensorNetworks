@@ -90,6 +90,41 @@ function sortSpectrum(tm::ITensor, proj::ITensor; notop=false, toponly=false, op
     end
 end
 
+function sortSpectrum2(tm::ITensor, proj::ITensor; notop=false, toponly=false, opr::Dict{String,String}=Dict{String,String}())
+    D, P, spec, _, e = eigen(tm)
+    eigs = spec.eigs
+    indord = sortperm(eigs; by=eig -> abs(eig), rev=true)
+    spectrum = storage(D)[indord]
+    λind = indord[@something findfirst(isreal, spectrum) 1]
+    λ = storage(D)[λind]
+
+    if toponly
+        v = onehot(e => λind) * P * proj
+        return real(v / norm(v) * sign(tr(v))), λ
+    end
+
+    let (specIO, prefix) = ssio(opr, "spec")
+        if !isnothing(specIO)
+            print(specIO, prefix...)
+            foreach(γ -> print(specIO, real(γ), ", ", imag(γ), ", "), spectrum)
+            println(specIO)
+            flush(specIO)
+        end
+    end
+
+    FPs = map(ie -> begin
+            FP = onehot(e => indord[ie]) * P * proj
+            FP / norm(FP)
+        end, findall(isapprox(abs(λ)), abs.(eigs)))
+
+    if notop
+        return FPs, λ
+    else
+        v = onehot(e => λind) * P * proj
+        return FPs, real(v / norm(v) * sign(tr(v))), λ
+    end
+end
+
 function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Dict{String,String}=Dict{String,String}())
     nopr = mergewith(*, opr, Dict("methodcall" => "fixedpoint,"))
     inds1 = [linkind, linkind']
@@ -103,8 +138,13 @@ function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Dict
     end
 
     asymtm = PA * real(tm) * replaceinds(PAinv, inds1, inds2)
-    sFPs, v, sλ = sortSpectrum(symtm, PS; opr=merge(nopr, Dict("sector" => "sym")))
-    aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
+    # sFPs, v, sλ = sortSpectrum(symtm, PS; opr=merge(nopr, Dict("sector" => "sym")))
+    # aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
+
+    symtask = Threads.@spawn sortSpectrum(symtm, PS; opr=merge(nopr, Dict("sector" => "sym")))
+    asymtask = Threads.@spawn sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
+    sFPs, v, sλ = fetch(symtask)
+    aFPs, aλ = fetch(asymtask)
 
     degenFP = if sλ ≈ aλ
         Iterators.flatten(zip(sFPs, aFPs))
@@ -146,12 +186,20 @@ function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; de
     nopr = mergewith(*, opr, Dict("methodcall" => "environment,"))
     El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2; opr=nopr)
     if decomposed
-        Dl, Ul, el, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
-        Dr, Ur, _, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        # Dl, Ul, el, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
+        # Dr, Ur, _, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        lefttask = Threads.@spawn fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
+        righttask = Threads.@spawn fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        Dl, Ul, el, λl = fetch(lefttask)
+        Dr, Ur, _, λr = fetch(righttask)
         return Dl, Ul, ll, Dr, Ur, lr, el, (λl + λr) / 2.0
     else
-        σ, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
-        μ, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        # σ, λl = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
+        # μ, λr = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        lefttask = Threads.@spawn fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
+        righttask = Threads.@spawn fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        σ, λl = fetch(lefttask)
+        μ, λr = fetch(righttask)
         return σ, ll, μ, lr, (λl + λr) / 2.0
     end
 end

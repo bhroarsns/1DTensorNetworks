@@ -1,4 +1,4 @@
-function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0)
+function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0, parallel=true)
     nopr = mergewith(*, opr, Dict("methodcall" => "canonicalize!,"))
     mpslen = mps.length
     Dl, Ul, ll, Dr, Ur, lr, el, λ = environment(mps, bondnum; opr=nopr)
@@ -18,6 +18,11 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::Dict{String,String}=
 
     X = Ul * inv.(sqrt.(Dl)) * U
     Y = V * inv.(sqrt.(Dr)) * Ur
+
+    if parallel
+        return λ, Σ, replaceind(X, ll, bl), replaceind(Y, lr, br)
+    end
+
     left = siteTensor(mps, bondnum) * replaceind(X, ll, bl)
     right = replaceind(Y, lr, br) * siteTensor(mps, bondnum + 1)
 
@@ -36,19 +41,36 @@ function canonicalize!(mps::InfiniteMPS, bondnum::Int; opr::Dict{String,String}=
     return λ
 end
 
-function canonicalizeAll!(mps::InfiniteMPS; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0)
+function canonicalizeAll!(mps::InfiniteMPS; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0, parallel=true)
     nopr = mergewith(*, opr, Dict("methodcall" => "canonicalizeAll!,"))
     λs = Vector{Complex}(undef, mps.length)
-    for ibond in eachindex(λs)
-        λ = canonicalize!(mps, ibond; opr=merge(nopr, Dict("bond" => bondname(mps, ibond))), svcutoff)
-        λs[ibond] = λ
+    if parallel
+        Σs = Vector{ITensor}(undef, mps.length)
+        Xs = Vector{ITensor}(undef, mps.length)
+        Ys = Vector{ITensor}(undef, mps.length)
+        Threads.@threads for ibond in eachindex(λs)
+            λ, Σ, X, Y = canonicalize!(mps, ibond; opr=merge(nopr, Dict("bond" => bondname(mps, ibond))), svcutoff, parallel)
+            λs[ibond] = λ
+            Σs[ibond] = Σ
+            Xs[ibond] = X
+            Ys[mod(ibond + 1, 1:mps.length)] = Y
+        end
+        for ibond in eachindex(Σs)
+            mps.bondWeights[ibond] = Σs[ibond]
+            mps.siteTensors[ibond] = Ys[ibond] * mps.siteTensors[ibond] * Xs[ibond]
+        end
+    else
+        for ibond in eachindex(λs)
+            λ = canonicalize!(mps, ibond; opr=merge(nopr, Dict("bond" => bondname(mps, ibond))), svcutoff, parallel)
+            λs[ibond] = λ
+        end
     end
     return λs
 end
 
 function normalize!(mps::InfiniteMPS; opr::Dict{String,String}=Dict{String,String}(), svcutoff::Float64=0.0)
     nopr = mergewith(*, opr, Dict("methodcall" => "normalize!,"))
-    λs = canonicalizeAll!(mps; opr=nopr, svcutoff)
+    @time λs = canonicalizeAll!(mps; opr=nopr, svcutoff)
     divider = sqrt(sum(abs.(λs)) / float(length(λs)))
     for ibond in eachindex(mps.bondWeights)
         bwnorm = norm(mps.bondWeights[ibond])
