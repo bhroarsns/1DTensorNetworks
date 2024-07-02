@@ -50,10 +50,11 @@ function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int
         # print(", ", length(spec.eigs), "->", truebonddim, "(", bonddim, ")")
         bonddim = truebonddim
         bonddim = min(count(>(svcutoff^2), spec.eigs), bonddim)
+        errU = sum(spec.eigs[bonddim+1:end].^2) / sum(spec.eigs.^2)
 
         let (errUIO, prefix) = ssio(nopr, "errU")
             if !isnothing(errUIO)
-                println(errUIO, prefix..., sum(spec.eigs[1:bonddim]), ", ", sum(spec.eigs))
+                println(errUIO, prefix..., errU)
                 flush(errUIO)
             end
         end
