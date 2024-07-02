@@ -9,6 +9,7 @@ function ssio(opr::Dict{String,String}, ssname::String)
     ssname == "errU" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errU.dat", "a"), (opr["step"], ", ", opr["fs"], ", ")
     ssname == "spec" && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["bond"])_$(opr["side"])_$(opr["sector"]).dat", "a"), (opr["step"], ", ")
     # ssname == "degenFP" && return open("$(opr["snapshotdir"])/Step/$(opr["step"])/$(opr["state"])/$(opr["bond"])_$(opr["side"])_degenFP.dat", "w"), ""
+    ssname == "errEig" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errEig.dat", "a"), (opr["step"], ", ", opr["bond"], ", ", opr["side"], ", ")
     ssname == "corr" && return open("$(opr["snapshotdir"])/Corr/$(opr["pair"]).dat", "a"), (opr["step"], ", ")
     startswith(ssname, "uspec") && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["fs"])_$(opr["bond"]).dat", "a"), (opr["step"], ", ")
     # if (opr["methodcall"] == "normalize!,") || (opr["methodcall"] == "update!,")
@@ -68,7 +69,9 @@ function doiTEBD(
     initType="",
     maxstep::Union{Int,Nothing}=nothing,
     verbose=true,
-    parallel=true
+    plevel::Int=3,
+    haltthres::Float64 = 1.0e-10,
+    fullspec=false
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(initType)" : "")
     resultdir, snapshotdir = setupDir(target)
@@ -101,7 +104,7 @@ function doiTEBD(
     end
     mkpathINE("$(snapshotdir)/Step/0/FUN")
 
-    normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "", "state" => "FUN"))
+    curTrs = normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "", "state" => "FUN"))
     prevsv = tensorSV(mps)
     printSV(snapshotdir, prevsv)
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
@@ -112,7 +115,7 @@ function doiTEBD(
         sgate = isnothing(singlesite) ? nothing : exp(-Δτ * singlesite)
         istep = 0
         diff = Inf
-        while diff > 1.0e-10
+        while diff > haltthres
             istep += 1
             curstep = totsteps + istep
             if !isnothing(maxstep) && curstep > maxstep
@@ -129,11 +132,19 @@ function doiTEBD(
             if !isnothing(sgate)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
-                normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"), parallel)
+                if fullspec
+                    normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"), plevel)
+                else
+                    curTrs = normalize!(mps, curTrs; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"), plevel)
+                end
                 update!(mps, sgate, [originalinds[begin]]; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUU"))
             end
             mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
-            normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"), parallel)
+            if fullspec
+                normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"), plevel)
+            else
+                curTrs = normalize!(mps, curTrs; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"), plevel)
+            end
             correlation(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
