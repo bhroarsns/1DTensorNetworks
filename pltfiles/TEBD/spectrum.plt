@@ -9,7 +9,6 @@ tfile = "snapshots/".target."/Spec/FUN/AB_left_tot.dat"
 nline = system("cat ".sfile." | wc -l")
 array topEV[nline+0]
 stats sfile u (topEV[$0+1] = abs(complex($2,$3))) nooutput
-print(topEV)
 
 set term tikz standalone size 8in,6in
 set output outfile
