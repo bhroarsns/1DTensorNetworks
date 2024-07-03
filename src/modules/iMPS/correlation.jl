@@ -30,9 +30,8 @@ function commutator(sts::Vector{ITensor}, t1::Int, s1::Pair{<:Index,Int}, t2::In
     return map(ci -> begin
         new1 = mat1 * replaceind(dag(mat1), ci, ci')
         new2 = mat2 * replaceind(dag(mat2), ci, ci')
-        new12 = new1 * prime(new2)
-        comm = new12 - new2 * prime(new1)
-        replace(string(tags(removetags(ci, "Bond"))), "\"" => ""), norm(comm) / norm(new12)
+        comm = new1 * prime(new2) - new2 * prime(new1)
+        replace(string(tags(removetags(ci, "Bond"))), "\"" => ""), norm(comm) / norm(new1) / norm(new2)
     end, commoninds(mat1, mat2))
 end
 
