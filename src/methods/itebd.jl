@@ -70,7 +70,8 @@ function doiTEBD(
     verbose=true,
     plevel::Int=3,
     haltthres::Float64 = 1.0e-10,
-    fullspec=false
+    fullspec=false,
+    recordInterval::Union{Int,Nothing}=nothing
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(initType)" : "")
     resultdir, snapshotdir = setupDir(target)
@@ -87,7 +88,11 @@ function doiTEBD(
     elseif initType == "MirrorTI"
         randomMirrorTIInfiniteMPS(sitetype, D; seed)
     else
-        randomInfiniteMPS(sitetype, D, mpslen; seed)
+        if isempty(initType)
+            randomInfiniteMPS(sitetype, D, mpslen; seed)
+        else
+            fromHDF5(initType)
+        end
     end
 
     mkpathINE("$(snapshotdir)/Corr")
@@ -151,6 +156,9 @@ function doiTEBD(
                 @printf ", total: %.16e" diff
             end
             measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
+            if !isnothing(recordInterval) && (curstep % recordInterval == 0)
+                record(mps, "./$(snapshotdir)/Step/$(curstep)/mps.h5")
+            end
         end
         β += Δτ * istep
         totsteps += istep
