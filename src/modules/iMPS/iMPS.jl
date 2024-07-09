@@ -1,6 +1,7 @@
 using ITensors
 using LinearAlgebra
 using Random
+using HDF5
 
 mutable struct InfiniteMPS
     length::Int
@@ -90,6 +91,16 @@ if !@isdefined ssio
     function ssio(_::Dict{String,String}, _::String)
         return nothing, ""
     end
+end
+
+function record(mps::InfiniteMPS, filename::String)
+    f = h5open(filename, "w")
+    for isite in eachindex(mps.siteTensors)
+        write(f, "$(sitename(mps, isite))", mps.siteTensors[isite])
+        write(f, "$(bondname(mps, isite))", mps.bondWeights[isite])
+    end
+    close(f)
+    return nothing
 end
 
 # function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))

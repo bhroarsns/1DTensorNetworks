@@ -86,3 +86,12 @@ function randomMirrorTIInfiniteMPS(sitetype::String, bonddim1::Int, bonddim2::In
 
     return InfiniteMPS([stA, stB], [bwAB, bwBA])
 end
+
+function fromHDF5(filename::String)
+    f = h5open(filename)
+    mpslen = length(f) ÷ 2
+    siteTensors = map(i -> read(f, string('A' + i - 1), ITensor), 1:mpslen)
+    bondWeights = map(i -> read(f, string('A' + i - 1, 'A' + mod(i+1, 1:mpslen) - 1), ITensor), 1:mpslen)
+    close(f)
+    return InfiniteMPS(siteTensors, bondWeights)
+end

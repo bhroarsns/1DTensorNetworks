@@ -163,12 +163,7 @@ function doiTEBD(
     @label end_of_loop
     println("\r", modelname, ": finished")
 
-    f = h5open("./$(snapshotdir)/mps.h5", "w")
-    for isite in eachindex(mps.siteTensors)
-        write(f, "$(sitename(mps, isite))", mps.siteTensors[isite])
-        write(f, "$(bondname(mps, isite))", mps.bondWeights[isite])
-    end
-    close(f)
+    record(mps, "./$(snapshotdir)/mps.h5")
 
     return nothing
 end
