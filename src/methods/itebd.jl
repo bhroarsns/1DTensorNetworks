@@ -22,7 +22,6 @@ end
 include("../modules/iMPS/iMPS.jl")
 include("../modules/util.jl")
 using Printf
-using HDF5
 
 function measurement(resultdir::String, mps::InfiniteMPS, hloc::ITensor, originalinds::Vector{Index{Int}}, istep::Int, β::Float64; singlesite::Union{ITensor,Nothing}=nothing, obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing)
     evs = real.(expectedvalues(mps, hloc, originalinds; normalized=true))
