@@ -69,7 +69,7 @@ function doiTEBD(
     maxstep::Union{Int,Nothing}=nothing,
     verbose=true,
     plevel::Int=3,
-    haltthres::Float64 = 1.0e-10,
+    haltthres::Float64=1.0e-10,
     fullspec=false,
     recordInterval::Union{Int,Nothing}=nothing
 )
@@ -108,7 +108,8 @@ function doiTEBD(
     end
     mkpathINE("$(snapshotdir)/Step/0/FUN")
 
-    curTrs = normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "", "state" => "FUN"))
+    opr = Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "")
+    curTrs = normalize!(mps; opr=merge(opr, Dict("state" => "FUN")))
     prevsv = tensorSV(mps)
     printSV(snapshotdir, prevsv)
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
@@ -120,6 +121,7 @@ function doiTEBD(
         istep = 0
         diff = Inf
         while diff > haltthres
+            # step number incrementation
             istep += 1
             curstep = totsteps + istep
             if !isnothing(maxstep) && curstep > maxstep
@@ -131,25 +133,36 @@ function doiTEBD(
             if verbose
                 print("\r", curstep, ", ", Δτ)
             end
+            opr["step"] = string(curstep)
+
+            # directory preparation
             mkpathINE("$(snapshotdir)/Step/$(curstep)/BSU")
-            update!(mps, gate, originalinds; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSU"))
+            mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
+
+            # bond hamiltonian update
+            update!(mps, gate, originalinds; opr=merge(opr, Dict("state" => "BSU")))
+
+            # single site gate update (if exists)
             if !isnothing(sgate)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
                 if fullspec
-                    normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"), plevel)
+                    normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel)
                 else
-                    curTrs = normalize!(mps, curTrs; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "BSN"), plevel)
+                    curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "BSN")), plevel)
                 end
-                update!(mps, sgate, [originalinds[begin]]; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUU"))
+                update!(mps, sgate, [originalinds[begin]]; opr=merge(opr, Dict("state" => "FUU")))
             end
-            mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
+
+            # canonicalization & normalization
             if fullspec
-                normalize!(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"), plevel)
+                normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel)
             else
-                curTrs = normalize!(mps, curTrs; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"), plevel)
+                curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "FUN")), plevel)
             end
-            correlation(mps; opr=Dict("snapshotdir" => snapshotdir, "step" => string(curstep), "methodcall" => "", "state" => "FUN"))
+
+            # measurements
+            correlation(mps; opr=merge(opr, Dict("state" => "FUN")))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
             if verbose
