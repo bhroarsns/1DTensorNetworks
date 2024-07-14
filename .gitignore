@@ -7,4 +7,4 @@ src/test*
 test*
 slurm*
 ED
-LocalPreferences
+LocalPreferences.toml
