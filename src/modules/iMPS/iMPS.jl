@@ -77,6 +77,16 @@ function InfiniteMPS(siteTensors::Vector{ITensor}, bondWeights::Vector{ITensor})
     return mps
 end
 
+function record(mps::InfiniteMPS, filename::String)
+    f = h5open(filename, "w")
+    for isite in eachindex(mps.siteTensors)
+        write(f, "$(sitename(mps, isite))", mps.siteTensors[isite])
+        write(f, "$(bondname(mps, isite))", mps.bondWeights[isite])
+    end
+    close(f)
+    return nothing
+end
+
 include("initialState.jl")
 include("contractKet.jl")
 include("environment.jl")
@@ -92,50 +102,3 @@ if !@isdefined ssio
         return nothing, ""
     end
 end
-
-function record(mps::InfiniteMPS, filename::String)
-    f = h5open(filename, "w")
-    for isite in eachindex(mps.siteTensors)
-        write(f, "$(sitename(mps, isite))", mps.siteTensors[isite])
-        write(f, "$(bondname(mps, isite))", mps.bondWeights[isite])
-    end
-    close(f)
-    return nothing
-end
-
-# function takeSnapshot(mps::InfiniteMPS; nopr::NamedTuple=(methodcall="",), ssio::Function=(_, _) -> (nothing, ""))
-#     for isite in 1:mps.length
-#         let (stIO, prefix) = ssio(nopr, "st:$(sitename(mps, isite))")
-#             if !isnothing(stIO)
-#                 st = mps.siteTensors[isite]
-#                 si = siteInd(mps, isite)
-#                 bl, br = bondInds(mps, isite)
-#                 println(stIO, "# $(tags(si)), $(tags(bl)), $(tags(br)), real, imag, abs, angle")
-#                 println(stIO, dim(si), ", ", dim(bl), ", ", dim(br))
-#                 for isi in eachval(si)
-#                     for ibl in eachval(bl)
-#                         for ibr in eachval(br)
-#                             entry = st[si=>isi, bl=>ibl, br=>ibr]
-#                             println(stIO, isi, ", ", ibl, ", ", ibr, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
-#                         end
-#                     end
-#                 end
-#                 flush(stIO)
-#             end
-#         end
-#     end
-
-#     for ibond in 1:mps.length
-#         let (bwIO, prefix) = ssio(nopr, "bw:$(bondname(mps, ibond))")
-#             if !isnothing(bwIO)
-#                 bl, _, bw = bond(mps, ibond)
-#                 println(bwIO, "# $(bondname(mps, ibond)), real, imag, abs, angle")
-#                 for ibl in eachval(bl)
-#                     entry = bw[ibl, ibl]
-#                     println(bwIO, ibl, ", ", real(entry), ", ", imag(entry), ", ", abs(entry), ", ", angle(entry))
-#                 end
-#                 flush(bwIO)
-#             end
-#         end
-#     end
-# end
