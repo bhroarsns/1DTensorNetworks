@@ -78,7 +78,7 @@ function doiTEBD(
         println(io, "# D=$(D), seed=$(seed)")
     end
 
-    logtime = open("./timeToNormalize.log", "w")
+    logtime = open("./logTime.txt", "w")
 
     β = 0.0
     totsteps = 0
