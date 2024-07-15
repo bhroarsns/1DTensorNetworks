@@ -1,6 +1,6 @@
 using Distributed
-using ITensors
-using LinearAlgebra
+@everywhere using ITensors
+@everywhere using LinearAlgebra
 using Random
 using HDF5
 
