@@ -78,6 +78,8 @@ function doiTEBD(
         println(io, "# D=$(D), seed=$(seed)")
     end
 
+    logtime = open("./timeToNormalize.log", "w")
+
     β = 0.0
     totsteps = 0
     mps = if initType == "Mirror"
@@ -146,7 +148,8 @@ function doiTEBD(
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
                 if fullspec
-                    normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel)
+                    println(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel))
+                    flush(logtime)
                 else
                     curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "BSN")), plevel)
                 end
@@ -155,7 +158,8 @@ function doiTEBD(
 
             # canonicalization & normalization
             if fullspec
-                normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel)
+                println(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel))
+                flush(logtime)
             else
                 curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "FUN")), plevel)
             end
@@ -181,6 +185,7 @@ function doiTEBD(
     end
     @label end_of_loop
     println("\r", modelname, ": finished")
+    close(logtime)
 
     record(mps, "./$(snapshotdir)/mps.h5")
 
