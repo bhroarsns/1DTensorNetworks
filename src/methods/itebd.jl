@@ -68,7 +68,7 @@ function doiTEBD(
     verbose=true,
     plevel::UInt8=0b111,
     haltthres::Float64=1.0e-10,
-    fullspec=false,
+    fullspec=true,
     recordInterval::Union{Int,Nothing}=nothing,
     numΔτ::Int=10
 )
