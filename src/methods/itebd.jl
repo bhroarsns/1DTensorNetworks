@@ -1,7 +1,5 @@
-using Pkg;
-Pkg.activate(".");
-
-function ssio(opr::Dict{String,String}, ssname::String)
+using Distributed
+@everywhere function ssio(opr::Dict{String,String}, ssname::String)
     # ssname == "errtm" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errtm.dat", "a"), (opr["step"], ", ")
     # ssname == "errv" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errv_$(opr["side"]).dat", "a"), (opr["step"], ", ")
     # ssname == "errΘ" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errΘ.dat", "a"), (opr["step"], ", ")
@@ -68,10 +66,11 @@ function doiTEBD(
     initType="",
     maxstep::Union{Int,Nothing}=nothing,
     verbose=true,
-    plevel::Int=3,
+    plevel::UInt8=0b111,
     haltthres::Float64=1.0e-10,
     fullspec=false,
-    recordInterval::Union{Int,Nothing}=nothing
+    recordInterval::Union{Int,Nothing}=nothing,
+    numΔτ::Int=10
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(initType)" : "")
     resultdir, snapshotdir = setupDir(target)
@@ -115,7 +114,7 @@ function doiTEBD(
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
 
     Δτ = initΔτ
-    while initΔτ / Δτ < 1000.0
+    for _ in 1:numΔτ
         gate = exp(-Δτ * hloc)
         sgate = isnothing(singlesite) ? nothing : exp(-Δτ * singlesite)
         istep = 0

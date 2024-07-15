@@ -19,7 +19,44 @@ function transfermatrix(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1;
     return El, Er, llink, rlink
 end
 
-function symprojector(ind1::Index{Int}, ind2::Index{Int})
+function symProjector(ind1::Index{Int}, ind2::Index{Int})
+    D = dim(ind1)
+    if dim(ind2) != D
+        error("Given indices must have the same dimension.")
+    end
+    indsym = addtags(Index(D * (D + 1) ÷ 2, tags(ind1)), "Sym")
+    P = ITensor(ind1, ind2, indsym)
+    Pinv = ITensor(ind1, ind2, indsym')
+
+    for i in 0:D*(D+1)÷2-1
+        qu = i ÷ (D + 1)
+        re = rem(i, D + 1)
+        qu2 = re ÷ (D - qu)
+        lef = mod(re + 1, 1:D-qu)
+        rig = lef + qu2 * D + (-1)^qu2 * (qu + qu2)
+        if lef == rig
+            P[lef, lef, i+1] = 1.0
+            Pinv[lef, lef, i+1] = 1.0
+        else
+            P[lef, rig, i+1] = 1.0
+            P[rig, lef, i+1] = 1.0
+            Pinv[lef, rig, i+1] = 0.5
+            Pinv[rig, lef, i+1] = 0.5
+        end
+    end
+
+    return P, Pinv
+end
+
+function getSymSector(tm::ITensor, linkind::Index{Int})
+    inds1 = [linkind, linkind']
+    inds2 = uniqueinds(tm, inds1)
+
+    PS, PSinv = symProjector(linkind, linkind')
+    return PS * real(tm) * replaceinds(PSinv, inds1, inds2), PS
+end
+
+function separator(ind1::Index{Int}, ind2::Index{Int})
     D = dim(ind1)
     if dim(ind2) != D
         error("Given indices must have the same dimension.")
@@ -55,214 +92,136 @@ function symprojector(ind1::Index{Int}, ind2::Index{Int})
     return P, Pinv, Q, Qinv, indsym, indasym
 end
 
-function sortSpectrum(tm::ITensor, proj::ITensor; notop=false, toponly=false, opr::Dict{String,String}=Dict{String,String}())
-    D, P, spec, _, e = eigen(tm)
-    eigs = spec.eigs
-    indord = sortperm(eigs; by=eig -> abs(eig), rev=true)
-    spectrum = storage(D)[indord]
-    λind = indord[@something findfirst(isreal, spectrum) 1]
-    λ = storage(D)[λind]
-
-    if toponly
-        v = onehot(e => λind) * P * proj
-        return real(v / norm(v) * sign(tr(v))), λ
-    end
-
-    let (specIO, prefix) = ssio(opr, "spec")
-        if !isnothing(specIO)
-            print(specIO, prefix...)
-            foreach(γ -> print(specIO, real(γ), ", ", imag(γ), ", "), spectrum)
-            println(specIO)
-            flush(specIO)
-        end
-    end
-
-    FPs = map(ie -> begin
-            FP = onehot(e => indord[ie]) * P * proj
-            FP / norm(FP)
-        end, findall(isapprox(abs(λ)), abs.(eigs)))
-
-    if notop
-        return FPs, λ
-    else
-        v = onehot(e => λind) * P * proj
-        return FPs, real(v / norm(v) * sign(tr(v))), λ
-    end
-end
-
-function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Dict{String,String}=Dict{String,String}(), plevel::Int=3)
-    nopr = mergewith(*, opr, Dict("methodcall" => "fixedpoint,"))
+function separateSector(tm::ITensor, linkind::Index{Int}; opr::Dict{String,String}=Dict{String,String}())
     inds1 = [linkind, linkind']
     inds2 = uniqueinds(tm, inds1)
 
-    PS, PSinv, PA, PAinv, indsym, indasym = symprojector(linkind, linkind')
+    PS, PSinv, PA, PAinv, indsym, indasym = separator(linkind, linkind')
     symtm = PS * real(tm) * replaceinds(PSinv, inds1, inds2)
-
-    if !decomposed
-        return sortSpectrum(symtm, PS; toponly=true, opr=nopr)
-    end
-
     asymtm = PA * real(tm) * replaceinds(PAinv, inds1, inds2)
-
-    v, sλ, aλ, sFPs, aFPs = if plevel > 0
-        symtask = Threads.@spawn sortSpectrum(symtm, PS; opr=merge(nopr, Dict("sector" => "sym")))
-        aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
-        sFPs, v, sλ = fetch(symtask)
-        v, sλ, aλ, sFPs, aFPs
-    else
-        sFPs, v, sλ = sortSpectrum(symtm, PS; opr=merge(nopr, Dict("sector" => "sym")))
-        aFPs, aλ = sortSpectrum(asymtm, PA; notop=true, opr=merge(nopr, Dict("sector" => "asym")))
-        v, sλ, aλ, sFPs, aFPs
-    end
-
-    degenFP = if sλ ≈ aλ
-        Iterators.flatten(zip(sFPs, aFPs))
-    else
-        sFPs
-    end
-
-    let (errIO, prefix) = ssio(nopr, "errtm")
+    let (errIO, prefix) = ssio(opr, "errtm")
         if !isnothing(errIO)
-            symtmorg = replaceind(replaceind(PSinv, indsym', indsym) * symtm, indsym', indsym) * replaceinds(PS, inds1, inds2)
-            asymtmorg = replaceind(replaceind(PAinv, indasym', indasym) * asymtm, indasym', indasym) * replaceinds(PA, inds1, inds2)
+            symtmorg = replaceind(PSinv, indsym', indsym) * symtm * replaceinds(PS, [indsym, inds1...], [indsym', inds2...])
+            asymtmorg = replaceind(PAinv, indasym', indasym) * asymtm * replaceinds(PA, [indasym, inds1...], [indasym', inds2...])
             println(errIO, prefix..., norm(tm - symtmorg - asymtmorg) / norm(tm))
             flush(errIO)
         end
     end
 
+    return symtm, PS, asymtm, PA
+end
+
+function peripheralSpectrum(tm::ITensor; findRealEV=true, toponly=false, opr::Dict{String,String}=Dict{String,String}())
+    D, P, _, _, e = eigen(tm)
+    sp = sortperm(storage(D); by=abs, rev=true)
+    let (specIO, prefix) = ssio(opr, "spec")
+        if !isnothing(specIO)
+            print(specIO, prefix...)
+            foreach(γ -> print(specIO, real(γ), ", ", imag(γ), ", "), storage(D)[sp])
+            println(specIO)
+            flush(specIO)
+        end
+    end
+    spectralRadius = abs(storage(D)[sp[begin]])
+    numdegen = count(isapprox(spectralRadius), abs.(storage(D)))
+    pinds = sp[1:numdegen]
+    pvecs = map(ie -> onehot(e => ie) * P, pinds)
+
+    if findRealEV
+        λind = @something findfirst(isreal, storage(D)[pinds]) error("No real eigenvalue found in the peripheral spectrum.")
+        v = pvecs[λind]
+
+        if toponly
+            return real(storage(D)[pinds[λind]]), v
+        else
+            return spectralRadius, pvecs, real(storage(D)[pinds[λind]]), v
+        end
+    else
+        return spectralRadius, pvecs
+    end
+end
+
+function fixedpoint(tm::ITensor, linkind::Index{Int}; decomposed=true, opr::Dict{String,String}=Dict{String,String}(), plevel=0b1)
+    nopr = mergewith(*, opr, Dict("methodcall" => "fixedpoint,"))
+
+    if !decomposed
+        symtm, PS = getSymSector(tm, linkind)
+        λ, v = peripheralSpectrum(tm; toponly=true, opr=nopr)
+        v = v * PS
+        v = v / norm(v) * sign(tr(v))
+        v, λ, tr(matrix(symtm)) / λ
+    end
+
+    symtm, PS, asymtm, PA = separateSector(tm, linkind)
+    sρ, aρ, svects, avects, λ, v = if isodd(plevel)
+        asymtask = @spawnat myid() + 1 peripheralSpectrum(asymtm; opr=merge(nopr, Dict("sector" => "asym")), findRealEV=false)
+        sρ, svects, λ, v = peripheralSpectrum(symtm; opr=merge(nopr, Dict("sector" => "sym")))
+        aρ, avects = fetch(asymtask)
+        sρ, aρ, svects, avects, λ, v
+    else
+        sρ, svects, λ, v = peripheralSpectrum(symtm; opr=merge(nopr, Dict("sector" => "sym")))
+        aρ, avects = peripheralSpectrum(asymtm; opr=merge(nopr, Dict("sector" => "asym")), findRealEV=false)
+        sρ, aρ, svects, avects, λ, v
+    end
+    !(sρ ≈ aρ) && sρ < aρ && error("Spectral radius of the anti-symmetric sector of the TM exceeds that of the symmetric sector.")
+
+    v = v * PS
+    v = v / norm(v) * sign(tr(v))
     D, U, _, e, _ = eigen(v; ishermitian=true)
+
     let (errvIO, prefix) = ssio(nopr, "errv")
         if !isnothing(errvIO)
             println(errvIO, prefix..., norm(v - dag(U) * D * prime(U)))
             flush(errvIO)
         end
     end
+
     let (degenFPIO, prefix) = ssio(nopr, "degenFP")
         if !isnothing(degenFPIO)
             print(degenFPIO, prefix...)
-            foreach(fp -> begin
-                    println(degenFPIO, fp)
-                    println(degenFPIO, prime(dag(U)) * fp * U)
-                end, degenFP)
+            for sv in svects
+                sFP = sv * PS
+                sFP /= norm(sFP)
+                println(degenFPIO, prime(dag(U)) * sFP * U)
+            end
+            if sρ ≈ aρ
+                for av in avects
+                    aFP = av * PA
+                    aFP /= norm(aFP)
+                    println(degenFPIO, prime(dag(U)) * aFP * U)
+                end
+            end
             flush(degenFPIO)
         end
     end
 
-    return D, U, e, sλ, tr(matrix(symtm)) / sλ
+    return D, U, e, λ, tr(matrix(symtm)) / λ
 end
 
-function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; decomposed=true, opr::Dict{String,String}=Dict{String,String}(), plevel::Int=3)
+function environment(mps::InfiniteMPS, bondnum1::Int, bondnum2::Int=bondnum1; decomposed=true, opr::Dict{String,String}=Dict{String,String}(), plevel::UInt8=0b11)
     nopr = mergewith(*, opr, Dict("methodcall" => "environment,"))
     El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2; opr=nopr)
     if decomposed
-        Dl, Ul, el, Dr, Ur, λ, curTr = if plevel > 1
-            lefttask = Threads.@spawn fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
-            Dr, Ur, _, λr, curTrR = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
+        if isodd(plevel)
+            lefttask = @spawnat myid() + 2^(count_ones(plevel >> 1)) fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")), plevel=plevel >> 1)
+            Dr, Ur, _, λr, curTrR = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")), plevel=plevel >> 1)
             Dl, Ul, el, λl, curTrL = fetch(lefttask)
-            Dl, Ul, el, Dr, Ur, (λl + λr) / 2.0,  (curTrL + curTrR) / 2.0
+            return Dl, Ul, ll, Dr, Ur, lr, el, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
         else
-            Dl, Ul, el, λl, curTrL = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
-            Dr, Ur, _, λr, curTrR = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
-            Dl, Ul, el, Dr, Ur, (λl + λr) / 2.0,  (curTrL + curTrR) / 2.0
+            Dl, Ul, el, λl, curTrL = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")), plevel=plevel >> 1)
+            Dr, Ur, _, λr, curTrR = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")), plevel=plevel >> 1)
+            return Dl, Ul, ll, Dr, Ur, lr, el, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
         end
-        return Dl, Ul, ll, Dr, Ur, lr, el, λ, curTr
     else
-        σ, μ, λ, curTr = if plevel > 1
-            lefttask = Threads.@spawn fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
+        if isodd(plevel)
+            lefttask = @spawnat myid() + 1 fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
             μ, λr, curTrR = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
             σ, λl, curTrL = fetch(lefttask)
-            σ, μ, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
+            return σ, ll, μ, lr, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
         else
             σ, λl, curTrL = fixedpoint(El, ll; decomposed, opr=merge(nopr, Dict("side" => "left")))
             μ, λr, curTrR = fixedpoint(Er, lr; decomposed, opr=merge(nopr, Dict("side" => "right")))
-            σ, μ, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
+            return σ, ll, μ, lr, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
         end
-        return σ, ll, μ, lr, λ, curTr
-    end
-end
-
-function sortSpectrum(tm::ITensor, proj::ITensor, prevTr::Float64; opr::Dict{String,String}=Dict{String,String}())
-    inputind = filterinds(hasplev(0), tm)[1]
-    matTM = matrix(tm, [inputind', inputind])
-    curTr = tr(matTM)
-    predicted_λ = curTr / prevTr
-    powerSteps = 100
-    inverseSteps = 10
-
-    v = rand!(zeros(size(matTM, 1)))
-    for _ in 1:powerSteps
-        v = matTM * v
-        v /= norm(v)
-    end
-    for _ in 1:inverseSteps
-        v = (matTM - predicted_λ * I) \ v
-        v /= norm(v)
-    end
-
-    λ = (v' * matTM * v) / (v' * v)
-
-    let (errEigIO, prefix) = ssio(opr, "errEig")
-        if !isnothing(errEigIO)
-            println(errEigIO, prefix..., norm((matTM - λ * I) * v))
-            flush(errEigIO)
-        end
-    end
-
-    v = ITensor(v, inputind) * proj
-    return real(v / norm(v) * sign(tr(v))), λ, curTr
-end
-
-function fixedpoint(tm::ITensor, linkind::Index{Int}, prevTr::Float64; decomposed=true, opr::Dict{String,String}=Dict{String,String}(), plevel::Int=3)
-    nopr = mergewith(*, opr, Dict("methodcall" => "fixedpoint,"))
-    inds1 = [linkind, linkind']
-    inds2 = uniqueinds(tm, inds1)
-
-    PS, PSinv = symprojector(linkind, linkind')
-    symtm = PS * real(tm) * replaceinds(PSinv, inds1, inds2)
-
-    v, sλ, curTr = sortSpectrum(symtm, PS, prevTr; opr=nopr)
-
-    if !decomposed
-        return v, sλ, curTr / sλ
-    end
-
-    D, U, _, e, _ = eigen(v; ishermitian=true)
-    let (errvIO, prefix) = ssio(nopr, "errv")
-        if !isnothing(errvIO)
-            println(errvIO, prefix..., norm(v - dag(U) * D * prime(U)))
-            flush(errvIO)
-        end
-    end
-
-    return D, U, e, sλ, curTr / sλ
-end
-
-function environment(mps::InfiniteMPS, bondnum1::Int, prevTr::Float64, bondnum2::Int=bondnum1; decomposed=true, opr::Dict{String,String}=Dict{String,String}(), plevel::Int=3)
-    nopr = mergewith(*, opr, Dict("methodcall" => "environment,"))
-    El, Er, ll, lr = transfermatrix(mps, bondnum1, bondnum2; opr=nopr)
-    if decomposed
-        Dl, Ul, el, Dr, Ur, λ, curTr = if plevel > 1
-            lefttask = Threads.@spawn fixedpoint(El, ll, prevTr; decomposed, opr=merge(nopr, Dict("side" => "left")))
-            Dr, Ur, _, λr, curTrR = fixedpoint(Er, lr, prevTr; decomposed, opr=merge(nopr, Dict("side" => "right")))
-            Dl, Ul, el, λl, curTrL = fetch(lefttask)
-            Dl, Ul, el, Dr, Ur, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
-        else
-            Dl, Ul, el, λl, curTrL = fixedpoint(El, ll, prevTr; decomposed, opr=merge(nopr, Dict("side" => "left")))
-            Dr, Ur, _, λr, curTrR = fixedpoint(Er, lr, prevTr; decomposed, opr=merge(nopr, Dict("side" => "right")))
-            Dl, Ul, el, Dr, Ur, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
-        end
-        return Dl, Ul, ll, Dr, Ur, lr, el, λ, curTr
-    else
-        σ, μ, λ, curTr = if plevel > 1
-            lefttask = Threads.@spawn fixedpoint(El, ll, prevTr; decomposed, opr=merge(nopr, Dict("side" => "left")))
-            μ, λr, curTrR = fixedpoint(Er, lr, prevTr; decomposed, opr=merge(nopr, Dict("side" => "right")))
-            σ, λl, curTrL = fetch(lefttask)
-            σ, μ, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
-        else
-            σ, λl, curTrL = fixedpoint(El, ll, prevTr; decomposed, opr=merge(nopr, Dict("side" => "left")))
-            μ, λr, curTrR = fixedpoint(Er, lr, prevTr; decomposed, opr=merge(nopr, Dict("side" => "right")))
-            σ, μ, (λl + λr) / 2.0, (curTrL + curTrR) / 2.0
-        end
-        return σ, ll, μ, lr, λ, curTr
     end
 end

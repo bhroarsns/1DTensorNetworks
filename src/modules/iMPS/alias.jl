@@ -57,8 +57,8 @@ function expectedvalue(mps::InfiniteMPS, op::ITensor, originalinds::Vector{Index
     return expectedvalue(mps, op, originalinds, getsitenum(mps, firstsite); normalized)
 end
 
-function canonicalize!(mps::InfiniteMPS, bn::String; fpcutoff::Float64=0.0, svcutoff::Float64=0.0)
-    return canonicalize!(mps, getbondnum(mps, bn); fpcutoff, svcutoff)
+function canonicalize!(mps::InfiniteMPS, bn::String)
+    return canonicalize!(mps, getbondnum(mps, bn))
 end
 
 function update!(mps::InfiniteMPS, gate::ITensor, originalinds::Vector{Index{Int}}, firstsite::Char; svcutoff::Float64=0.0, newbonddim::Union{Int,Nothing}=nothing)

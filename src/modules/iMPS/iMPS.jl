@@ -1,27 +1,28 @@
+using Distributed
 using ITensors
 using LinearAlgebra
 using Random
 using HDF5
 
-mutable struct InfiniteMPS
+@everywhere mutable struct InfiniteMPS
     length::Int
     siteTensors::Vector{ITensor}
     bondWeights::Vector{ITensor}
 end
 
-function siteTensor(mps::InfiniteMPS, sitenum::Int)
+@everywhere function siteTensor(mps::InfiniteMPS, sitenum::Int)
     return mps.siteTensors[mod(sitenum, 1:mps.length)]
 end
 
-function bondWeight(mps::InfiniteMPS, bondnum::Int)
+@everywhere function bondWeight(mps::InfiniteMPS, bondnum::Int)
     return mps.bondWeights[mod(bondnum, 1:mps.length)]
 end
 
-function sitename(mps::InfiniteMPS, sitenum::Int)
+@everywhere function sitename(mps::InfiniteMPS, sitenum::Int)
     return 'A' + mod(sitenum, 1:mps.length) - 1
 end
 
-function bondname(mps::InfiniteMPS, bondnum::Int)
+@everywhere function bondname(mps::InfiniteMPS, bondnum::Int)
     return string(sitename(mps, bondnum), sitename(mps, bondnum + 1))
 end
 
@@ -61,7 +62,7 @@ function bondInds(mps::InfiniteMPS, sitenum::Int)
     return commonind(st, bwl), commonind(st, bwr)
 end
 
-function bond(mps::InfiniteMPS, bondnum::Int)
+@everywhere function bond(mps::InfiniteMPS, bondnum::Int)
     bw = bondWeight(mps, bondnum)
     stl = siteTensor(mps, bondnum)
     str = siteTensor(mps, bondnum + 1)
@@ -88,9 +89,10 @@ function record(mps::InfiniteMPS, filename::String)
 end
 
 include("initialState.jl")
-include("contractKet.jl")
-include("environment.jl")
-include("canonicalize.jl")
+@everywhere include("contractKet.jl")
+@everywhere include("environment.jl")
+@everywhere include("canonicalize.jl")
+include("normalize.jl")
 include("update.jl")
 include("expectedValue.jl")
 include("sv.jl")
@@ -98,7 +100,7 @@ include("correlation.jl")
 include("alias.jl")
 
 if !@isdefined ssio
-    function ssio(_::Dict{String,String}, _::String)
+    @everywhere function ssio(_::Dict{String,String}, _::String)
         return nothing, ""
     end
 end
