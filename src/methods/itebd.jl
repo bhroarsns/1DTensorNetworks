@@ -72,7 +72,7 @@ function doiTEBD(
     recordInterval::Union{Int,Nothing}=nothing,
     numΔτ::Int=10
 )
-    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(initType)" : "")
+    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType), '/' => '-')" : "")
     resultdir, snapshotdir = setupDir(target)
     open("$(resultdir)/energy.dat", "w") do io
         println(io, "# D=$(D), seed=$(seed)")
