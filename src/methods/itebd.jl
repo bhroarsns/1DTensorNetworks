@@ -72,7 +72,7 @@ function doiTEBD(
     recordInterval::Union{Int,Nothing}=nothing,
     numΔτ::Int=10
 )
-    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType), '/' => '-')" : "")
+    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType, '/' => '-'))" : "")
     resultdir, snapshotdir = setupDir(target)
     open("$(resultdir)/energy.dat", "w") do io
         println(io, "# D=$(D), seed=$(seed)")
@@ -110,7 +110,7 @@ function doiTEBD(
     mkpathINE("$(snapshotdir)/Step/0/FUN")
 
     opr = Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "")
-    curTrs = normalize!(mps; opr=merge(opr, Dict("state" => "FUN")))
+    curTrs = normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel)
     prevsv = tensorSV(mps)
     printSV(snapshotdir, prevsv)
     measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
@@ -127,7 +127,7 @@ function doiTEBD(
             curstep = totsteps + istep
             if !isnothing(maxstep) && curstep > maxstep
                 if verbose
-                    println("\r", modelname, ": interrupted")
+                    println("\n", modelname, ": interrupted due to maxstep($(maxstep))")
                 end
                 @goto end_of_loop
             end
@@ -148,7 +148,8 @@ function doiTEBD(
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
                 if fullspec
-                    println(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel))
+                    print(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel))
+                    print(logtime, ", ")
                     flush(logtime)
                 else
                     curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "BSN")), plevel)
@@ -158,7 +159,8 @@ function doiTEBD(
 
             # canonicalization & normalization
             if fullspec
-                println(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel))
+                print(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel))
+                print(logtime, ", ")
                 flush(logtime)
             else
                 curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "FUN")), plevel)
@@ -168,6 +170,8 @@ function doiTEBD(
             correlation(mps; opr=merge(opr, Dict("state" => "FUN")))
             diff, prevsv = compareSV(mps, prevsv)
             printSV(snapshotdir, prevsv)
+            println(logtime, @sprintf("%.16e", diff))
+            flush(logtime)
             if verbose
                 @printf ", total: %.16e" diff
             end
