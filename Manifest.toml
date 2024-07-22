@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "ba58c2612e5bf182b7892d76bec871584c8f1836"
+project_hash = "ac8320ae1aa576bdb75f22b38752474294dbc756"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -357,6 +357,24 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "ca0f6bf568b4bfc807e7537f081c81e35ceca114"
 uuid = "e33a78d0-f292-5ffc-b300-72abe9b543c8"
 version = "2.10.0+0"
+
+[[deps.ITensorMPS]]
+deps = ["ITensorTDVP", "ITensors", "Reexport"]
+git-tree-sha1 = "c54a9f646ae7532a8a269c6313f76f778bae1b2d"
+uuid = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
+version = "0.2.4"
+
+[[deps.ITensorTDVP]]
+deps = ["Adapt", "Compat", "ITensors", "KrylovKit", "LinearAlgebra", "NDTensors", "PackageExtensionCompat", "Printf", "TimerOutputs"]
+git-tree-sha1 = "5352ac885a0f67a30d7bf9f0c7d2c87ecd3155fa"
+uuid = "25707e16-a4db-4a07-99d9-4d67b7af0342"
+version = "0.4.7"
+
+    [deps.ITensorTDVP.extensions]
+    ITensorTDVPObserversExt = "Observers"
+
+    [deps.ITensorTDVP.weakdeps]
+    Observers = "338f10d5-c7f1-4033-a7d1-f9dec39bcaa0"
 
 [[deps.ITensors]]
 deps = ["Adapt", "BitIntegers", "ChainRulesCore", "Compat", "Dictionaries", "DocStringExtensions", "Functors", "IsApprox", "KrylovKit", "LinearAlgebra", "LinearMaps", "NDTensors", "PackageExtensionCompat", "Pkg", "Printf", "Random", "Requires", "SerializedElementArrays", "SimpleTraits", "StaticArrays", "Strided", "TimerOutputs", "TupleTools", "Zeros"]

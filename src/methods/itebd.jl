@@ -88,6 +88,12 @@ function doiTEBD(
         randomTIInfiniteMPS(sitetype, D; seed)
     elseif initType == "MirrorTI"
         randomMirrorTIInfiniteMPS(sitetype, D; seed)
+    elseif initType == "SII"
+        randomSIIInfiniteMPS(sitetype, D, mpslen; seed)
+    elseif initType == "PHS"
+        randomPHSInfiniteMPS(sitetype, D, mpslen; seed)
+    elseif initType == "PHESII"
+        randomPHESIIInfiniteMPS(sitetype, D, mpslen; seed)
     else
         if isempty(initType)
             randomInfiniteMPS(sitetype, D, mpslen; seed)

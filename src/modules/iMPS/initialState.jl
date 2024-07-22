@@ -91,7 +91,65 @@ function fromHDF5(filename::String)
     f = h5open(filename)
     mpslen = length(f) ÷ 2
     siteTensors = map(i -> read(f, string('A' + i - 1), ITensor), 1:mpslen)
-    bondWeights = map(i -> read(f, string('A' + i - 1, 'A' + mod(i+1, 1:mpslen) - 1), ITensor), 1:mpslen)
+    bondWeights = map(i -> read(f, string('A' + i - 1, 'A' + mod(i + 1, 1:mpslen) - 1), ITensor), 1:mpslen)
     close(f)
     return InfiniteMPS(siteTensors, bondWeights)
+end
+
+using ITensorMPS
+ITensors.op(::OpName"Sinv", ::SiteType"S=1/2") = [
+    0.0 1.0
+    1.0 0.0
+]
+ITensors.op(::OpName"Sinv", ::SiteType"S=1") = [
+    0.0 0.0 1.0
+    0.0 1.0 0.0
+    1.0 0.0 0.0
+]
+ITensors.op(::OpName"Sinv", ::SiteType"Electron") = [
+    1.0 0.0 0.0 0.0
+    0.0 0.0 1.0 0.0
+    0.0 1.0 0.0 0.0
+    0.0 0.0 0.0 1.0
+]
+ITensors.op(::OpName"Sinv", ::SiteType"tJ") = [
+    1.0 0.0 0.0
+    0.0 0.0 1.0
+    0.0 1.0 0.0
+]
+
+function randomSIIInfiniteMPS(sitetype::String, bonddim::Int, mpslen::Int; seed::Union{Int,Nothing}=nothing)
+    mps = randomInfiniteMPS(sitetype, bonddim, mpslen; seed)
+    mps.siteTensors = map(i -> (siteTensor(mps, i) + prime(siteTensor(mps, i); tags="Site") * op("Sinv", siteInd(mps, i))) / 2.0, 1:mpslen)
+    return mps
+end
+
+ITensors.op(::OpName"PHE", ::SiteType"Electron") = [
+    0.0 0.0 0.0 1.0
+    0.0 0.0 1.0 0.0
+    0.0 1.0 0.0 0.0
+    1.0 0.0 0.0 0.0
+]
+ITensors.op(::OpName"PHE", ::SiteType"Fermion") = [
+    0.0 1.0
+    1.0 0.0
+]
+
+function randomPHSInfiniteMPS(sitetype::String, bonddim::Int, mpslen::Int; seed::Union{Int,Nothing}=nothing)
+    mps = randomInfiniteMPS(sitetype, bonddim, mpslen; seed)
+    mps.siteTensors = map(i -> (siteTensor(mps, i) + prime(siteTensor(mps, i); tags="Site") * op("PHE", siteInd(mps, i))) / 2.0, 1:mpslen)
+    return mps
+end
+
+ITensors.op(::OpName"PHESI", ::SiteType"Electron") = [
+    0.0 0.0 0.0 1.0
+    0.0 1.0 0.0 0.0
+    0.0 0.0 1.0 0.0
+    1.0 0.0 0.0 0.0
+]
+
+function randomPHESIIInfiniteMPS(sitetype::String, bonddim::Int, mpslen::Int; seed::Union{Int,Nothing}=nothing)
+    mps = randomInfiniteMPS(sitetype, bonddim, mpslen; seed)
+    mps.siteTensors = map(i -> (siteTensor(mps, i) + prime(siteTensor(mps, i); tags="Site") * op("PHESI", siteInd(mps, i))) / 2.0, 1:mpslen)
+    return mps
 end
