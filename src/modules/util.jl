@@ -7,8 +7,8 @@ function mkpathINE(path::String)
     end
 end
 
-function setupDir(target::String)
-    targetwts = "$(Date(Dates.now()))/$(target)"
+function setupDir(date::String, target::String)
+    targetwts = "$(date)/$(target)"
     resultdir = "./results/$(targetwts)"
     snapshotdir = "./snapshots/$(targetwts)"
     if isdir(snapshotdir)

@@ -70,10 +70,11 @@ function doiTEBD(
     haltthres::Float64=1.0e-10,
     fullspec=true,
     recordInterval::Union{Int,Nothing}=nothing,
-    numΔτ::Int=10
+    numΔτ::Int=10,
+    date::String=string(Date(Dates.now()))
 )
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType, '/' => '-'))" : "")
-    resultdir, snapshotdir = setupDir(target)
+    resultdir, snapshotdir = setupDir(date, target)
     open("$(resultdir)/energy.dat", "w") do io
         println(io, "# D=$(D), seed=$(seed)")
     end
