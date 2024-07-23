@@ -1,7 +1,7 @@
-target = "2024-07-22/Hubbard/U=-10.0/iTEBD/mpslen=2/D=16"
+model = system("echo $MODEL")
+target = model."/iTEBD/mpslen=2/D=16"
 datfiles = system("ls results/".target."/*/*/energy.dat results/".target."/*/*/*/energy.dat")
 outfile = "tex/".target."/energy.tex"
-exac = -0.267155
 
 titlefn(dat) = sprintf("%s %s", system("echo ".dat." | grep -oE \"seed=[0-9]+\" | sed \"s/seed=//g\""), system("echo ".dat." | grep -oE 'initΔτ\=0\.1.*\/energy.dat' | sed \"s/initΔτ=0.1//g\" | sed \"s/\\\/energy.dat//g\" | sed \"s/\\\///g\""))
 
