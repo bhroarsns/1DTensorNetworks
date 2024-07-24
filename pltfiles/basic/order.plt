@@ -2,6 +2,7 @@ reset
 set term png size 640,480
 target = system("echo $TARGET")
 
+set title target
 set xrange [0:0.5]
 set logscale y
 set key right bottom

@@ -12,7 +12,7 @@ stats sfile u (topEV[$0+1] = abs(complex($2,$3))) nooutput
 
 set term tikz standalone size 8in,6in
 set output outfile
-# set title target
+set title target noenhanced
 
 set xlabel 'TEBD steps'
 set ylabel 'Transfer Matrix Eigenvalues'
