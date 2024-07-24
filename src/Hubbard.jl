@@ -10,10 +10,10 @@ function hamiltonian(; U::Float64, μ::Float64=U / 2.0)
     # op. order: younger first ... c†₂ c†₁|0>
     # spin order: up - down c†↑ c†↓ |0>
     # ==> j↑ j↓ i↑ i↓
-    hloc = op("c†↑ * F↓", i) * op("c↑", j) * -1.0
-    hloc += op("c†↓ * F↑", i) * op("c↓", j) * -1.0
-    hloc += op("c↑ * F↓", i) * op("c†↑", j) * -1.0
-    hloc += op("c↓ * F↑", i) * op("c†↓", j) * -1.0
+    hloc = op("a†↑", i) * op("a↑", j) * -1.0
+    hloc += op("a†↓", i) * op("a↓", j) * -1.0
+    hloc += op("a↑", i) * op("a†↑", j) * -1.0
+    hloc += op("a↓", i) * op("a†↓", j) * -1.0
     hbond = hloc
     singlesite = nothing
     if U != 0.0
@@ -31,7 +31,7 @@ function executeTEBD(seed::Int, initΔτ::Float64, D::Int; U::Float64, μ::Float
     modelname, hloc, orginds, singlesite, hbond = hamiltonian(; U, μ)
     doiTEBD(
         modelname,
-        hloc,
+        hbond,
         orginds,
         "Electron",
         initΔτ,
