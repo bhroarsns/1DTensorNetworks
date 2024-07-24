@@ -37,7 +37,6 @@ function executeTEBD(seed::Int, initΔτ::Float64, D::Int; U::Float64, μ::Float
         initΔτ,
         D,
         seed;
-        singlesite,
         obs=[
             (op("ntot", orginds[begin]), [orginds[begin]]),
             (op("n↑", orginds[begin]), [orginds[begin]]),
