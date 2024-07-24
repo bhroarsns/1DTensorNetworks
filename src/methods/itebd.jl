@@ -80,6 +80,8 @@ function doiTEBD(
     end
 
     logtime = open("./logTime.txt", "w")
+    println(logtime, target)
+    flush(logtime)
 
     β = 0.0
     totsteps = 0
