@@ -7,7 +7,6 @@ using Distributed
     ssname == "errU" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errU.dat", "a"), (opr["step"], ", ", opr["fs"], ", ")
     ssname == "spec" && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["bond"])_$(opr["side"])_$(opr["sector"]).dat", "a"), (opr["step"], ", ")
     # ssname == "degenFP" && return open("$(opr["snapshotdir"])/Step/$(opr["step"])/$(opr["state"])/$(opr["bond"])_$(opr["side"])_degenFP.dat", "w"), ""
-    ssname == "errEig" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errEig.dat", "a"), (opr["step"], ", ", opr["bond"], ", ", opr["side"], ", ")
     ssname == "corr" && return open("$(opr["snapshotdir"])/Corr/$(opr["pair"]).dat", "a"), (opr["step"], ", ")
     startswith(ssname, "uspec") && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["fs"])_$(opr["bond"]).dat", "a"), (opr["step"], ", ")
     # if (opr["methodcall"] == "normalize!,") || (opr["methodcall"] == "update!,")
@@ -22,13 +21,13 @@ include("../modules/util.jl")
 using Printf
 
 function measurement(resultdir::String, mps::InfiniteMPS, hloc::ITensor, originalinds::Vector{Index{Int}}, istep::Int, β::Float64; singlesite::Union{ITensor,Nothing}=nothing, obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing)
-    evs = real.(expectedvalues(mps, hloc, originalinds; normalized=true))
-    aveev = sum(evs) / length(evs)
-    output = @sprintf("%03d, %+.16e, %+.16e, %s", istep, β, aveev, join(map(ev -> @sprintf("%+.16e", ev), evs), ", "))
+    bondEs = real.(expectedvalues(mps, hloc, originalinds; normalized=true))
+    aveE = sum(bondEs) / length(bondEs)
+    output = @sprintf("%03d, %+.16e, %+.16e, %s", istep, β, aveE, join(map(ev -> @sprintf("%+.16e", ev), bondEs), ", "))
     if !isnothing(singlesite)
-        ssevs = real.(expectedvalues(mps, singlesite, [originalinds[begin]]; normalized=true))
-        aveev += sum(ssevs) / length(ssevs)
-        output = @sprintf("%03d, %+.16e, %+.16e, %s, %s", istep, β, aveev, join(map(ev -> @sprintf("%+.16e", ev), evs), ", "), join(map(ev -> @sprintf("%+.16e", ev), ssevs), ", "))
+        ssEs = real.(expectedvalues(mps, singlesite, [originalinds[begin]]; normalized=true))
+        aveE += sum(ssEs) / length(ssEs)
+        output = @sprintf("%03d, %+.16e, %+.16e, %s, %s", istep, β, aveE, join(map(ev -> @sprintf("%+.16e", ev), bondEs), ", "), join(map(ev -> @sprintf("%+.16e", ev), ssEs), ", "))
     end
     if !isnothing(obs)
         for (ob, orginds) in obs
@@ -39,6 +38,7 @@ function measurement(resultdir::String, mps::InfiniteMPS, hloc::ITensor, origina
     open("$(resultdir)/energy.dat", "a") do io
         println(io, output)
     end
+    return aveE
 end
 
 function printSV(snapshotdir::String, svdict::Dict{String,Vector{Float64}})
@@ -47,6 +47,13 @@ function printSV(snapshotdir::String, svdict::Dict{String,Vector{Float64}})
             println(io, join(svdict[k], ", "))
         end
     end
+    return nothing
+end
+
+function diffSV(snapshotdir::String, mps::InfiniteMPS, svdict::Dict{String,Vector{Float64}})
+    diff, newdict = compareSV(mps, svdict)
+    printSV(snapshotdir, newdict)
+    return diff, newdict
 end
 
 function doiTEBD(
@@ -60,31 +67,51 @@ function doiTEBD(
     # MPS parameters
     D::Int,
     seed::Int;
-    mpslen::Int=length(originalinds),
+    # optional Hamiltonian parameters
     singlesite::Union{ITensor,Nothing}=nothing,
     obs::Union{Vector{Tuple{ITensor,Vector{Index{Int}}}},Nothing}=nothing,
-    initType="",
+    # optional TEBD parameters
+    fullspec=true,
     maxstep::Union{Int,Nothing}=nothing,
+    haltthres::Float64=1.0e-10,
+    numΔτ::Int=20,
+    eneThreas::Float64=1.0e-6,
+    # optional MPS parameters
+    mpslen::Int=length(originalinds),
+    initType="",
+    # optional computational parameters
     verbose=true,
     plevel::UInt8=0b111,
-    haltthres::Float64=1.0e-10,
-    fullspec=true,
     recordInterval::Union{Int,Nothing}=nothing,
-    numΔτ::Int=10,
-    date::String=string(Date(Dates.now()))
+    date::String=string(Date(Dates.now())),
 )
+    # directory setup
     target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType, '/' => '-'))" : "")
     resultdir, snapshotdir = setupDir(date, target)
-    open("$(resultdir)/energy.dat", "w") do io
-        println(io, "# D=$(D), seed=$(seed)")
+    mkpathINE("$(snapshotdir)/Corr")
+    mkpathINE("$(snapshotdir)/Spec/BSU")
+    mkpathINE("$(snapshotdir)/Err/BSU")
+    mkpathINE("$(snapshotdir)/Spec/FUN")
+    mkpathINE("$(snapshotdir)/Err/FUN")
+    if !isnothing(singlesite)
+        mkpathINE("$(snapshotdir)/Spec/BSN")
+        mkpathINE("$(snapshotdir)/Err/BSN")
+        mkpathINE("$(snapshotdir)/Spec/FUU")
+        mkpathINE("$(snapshotdir)/Err/FUU")
     end
+    mkpathINE("$(snapshotdir)/Step/0/FUN")
+    touch("$(resultdir)/convergence.dat")
 
     logtime = open("./logTime.txt", "w")
-    println(logtime, target)
-    flush(logtime)
+    println(logtime, target); flush(logtime)
 
+    # parameter initialization
     β = 0.0
+    Δτ = initΔτ
     totsteps = 0
+    opr = Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "")
+
+    # mps initialization
     mps = if initType == "Mirror"
         randomMirrorInfiniteMPS(sitetype, D; seed)
     elseif initType == "TI"
@@ -105,101 +132,84 @@ function doiTEBD(
         end
     end
 
-    mkpathINE("$(snapshotdir)/Corr")
-    mkpathINE("$(snapshotdir)/Spec/BSU")
-    mkpathINE("$(snapshotdir)/Err/BSU")
-    mkpathINE("$(snapshotdir)/Spec/FUN")
-    mkpathINE("$(snapshotdir)/Err/FUN")
-    if !isnothing(singlesite)
-        mkpathINE("$(snapshotdir)/Spec/BSN")
-        mkpathINE("$(snapshotdir)/Err/BSN")
-        mkpathINE("$(snapshotdir)/Spec/FUU")
-        mkpathINE("$(snapshotdir)/Err/FUU")
-    end
-    mkpathINE("$(snapshotdir)/Step/0/FUN")
-
-    opr = Dict("snapshotdir" => snapshotdir, "step" => string(0), "methodcall" => "")
+    # init state measurements
     curTrs = normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel)
     prevsv = tensorSV(mps)
     printSV(snapshotdir, prevsv)
-    measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
+    prevE = measurement(resultdir, mps, hloc, originalinds, totsteps, β; singlesite, obs)
 
-    Δτ = initΔτ
     for _ in 1:numΔτ
         gate = exp(-Δτ * hloc)
         sgate = isnothing(singlesite) ? nothing : exp(-Δτ * singlesite)
         istep = 0
         diff = Inf
-        while diff > haltthres
+        curE = prevE
+        diffE = Inf
+
+        while diff > haltthres || diffE > eneThreas
             # step number incrementation
             istep += 1
             curstep = totsteps + istep
             if !isnothing(maxstep) && curstep > maxstep
-                if verbose
-                    println("\n", modelname, ": interrupted due to maxstep($(maxstep))")
+                open("$(resultdir)/convergence.dat", "a") do io
+                    println(io, Δτ, ", ", curE, ", ", totsteps)
                 end
-                @goto end_of_loop
+                verbose && println("\n", "Interrupted due to maxstep($(maxstep))")
+                @goto interuption
             end
-            if verbose
-                print("\r", curstep, ", ", Δτ)
-            end
+            verbose && print("\r", curstep, ", ", Δτ)
             opr["step"] = string(curstep)
 
-            # directory preparation
-            mkpathINE("$(snapshotdir)/Step/$(curstep)/BSU")
-            mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
-
             # bond hamiltonian update
+            mkpathINE("$(snapshotdir)/Step/$(curstep)/BSU")
             update!(mps, gate, originalinds; opr=merge(opr, Dict("state" => "BSU")))
 
             # single site gate update (if exists)
             if !isnothing(sgate)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
+                print(logtime, (@elapsed normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel)), ", "); flush(logtime)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
-                if fullspec
-                    print(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel))
-                    print(logtime, ", ")
-                    flush(logtime)
-                else
-                    curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "BSN")), plevel)
-                end
                 update!(mps, sgate, [originalinds[begin]]; opr=merge(opr, Dict("state" => "FUU")))
             end
 
             # canonicalization & normalization
-            if fullspec
-                print(logtime, @elapsed normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel))
-                print(logtime, ", ")
-                flush(logtime)
-            else
-                curTrs = normalize!(mps, curTrs; opr=merge(opr, Dict("state" => "FUN")), plevel)
-            end
+            mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
+            print(logtime, (@elapsed normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel)), ", "); flush(logtime)
 
             # measurements
             correlation(mps; opr=merge(opr, Dict("state" => "FUN")))
-            diff, prevsv = compareSV(mps, prevsv)
-            printSV(snapshotdir, prevsv)
-            println(logtime, @sprintf("%.16e", diff))
-            flush(logtime)
-            if verbose
-                @printf ", total: %.16e" diff
-            end
-            measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
+            diff, prevsv = diffSV(snapshotdir, mps, prevsv)
+            tmpE = measurement(resultdir, mps, hloc, originalinds, curstep, β + Δτ * istep; singlesite, obs)
+
+            # monitoring
+            println(logtime, @sprintf("%.16e, %.16e", diff, diffE)); flush(logtime)
+            verbose && @printf ", total: %.16e, %.16e" diff diffE
             if !isnothing(recordInterval) && (curstep % recordInterval == 0)
                 record(mps, "./$(snapshotdir)/Step/$(curstep)/mps.h5")
             end
+
+            diffE = abs(tmpE - curE)
+            curE = tmpE
         end
+        open("$(resultdir)/convergence.dat", "a") do io
+            println(io, Δτ, ", ", curE, ", ", totsteps+istep)
+        end
+        if abs(curE - prevE) / abs(prevE) < eneThreas
+            verbose && println("\n", "Interrupted due to energy convergence(prevE=$(prevE), curE=$(curE))")
+            @goto interuption
+        end
+
         β += Δτ * istep
         totsteps += istep
         Δτ /= 2.0
-        if verbose
-            println("")
-        end
+        prevE = curE
+        verbose && println("")
     end
-    @label end_of_loop
+    verbose && println("\n", "Interrupted due to numΔτ($numΔτ)")
+    @label interuption
+
     println("\r", modelname, ": finished")
     close(logtime)
-
     record(mps, "./$(snapshotdir)/mps.h5")
 
     return nothing
