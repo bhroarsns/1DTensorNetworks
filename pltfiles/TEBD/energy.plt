@@ -3,6 +3,8 @@ target = model."/iTEBD/mpslen=2/D=16"
 datfiles = system("ls results/".target."/*/*/energy.dat results/".target."/*/*/*/energy.dat")
 outfile = "tex/".target."/energy.tex"
 
+inittypes = system("ls results/".target."/*/*/energy.dat results/".target."/*/*/*/energy.dat | grep -oE 'initΔτ\=0\.1.*\/energy.dat' | sed \"s/initΔτ=0.1//g\" | sed \"s/\\\/energy.dat//g\" | sort -u")
+
 titlefn(dat) = sprintf("%s %s", system("echo ".dat." | grep -oE \"seed=[0-9]+\" | sed \"s/seed=//g\""), system("echo ".dat." | grep -oE 'initΔτ\=0\.1.*\/energy.dat' | sed \"s/initΔτ=0.1//g\" | sed \"s/\\\/energy.dat//g\" | sed \"s/\\\///g\""))
 
 set term tikz standalone size 8in,6in
@@ -12,7 +14,7 @@ set title target noenhanced
 set xlabel 'TEBD steps'
 set ylabel 'Energy Density $E_{GS}$'
 # set xrange [0:500]
-set yrange [floor(exac*10) / 10.0:exac+0.1]
+set yrange [floor(exac*10)/10.0:floor(exac*10)/10.0+0.1]
 
 plot for [datfile in datfiles] datfile u 1:3 w l title titlefn(datfile), exac w l title "Exact"
 
@@ -27,6 +29,51 @@ set ylabel 'Relative Error Energy Density $\Delta E_{GS}$'
 
 plot for [datfile in datfiles] datfile u (1.0/$2):(abs($3-exac)/abs(exac)) w l title titlefn(datfile)
 
+unset logscale y
+unset xrange
+set title target." (no symmetry)" noenhanced
+typfiles = system("ls results/".target."/*/*/"."/energy.dat")
+set xlabel 'TEBD steps'
+set ylabel 'Energy Density $E_{GS}$'
+# set xrange [0:500]
+set yrange [floor(exac*10)/10.0:floor(exac*10)/10.0+0.1]
+
+plot for [typfile in typfiles] typfile u 1:3 w l title titlefn(typfile), exac w l title "Exact"
+
+set xrange [0:1]
+unset yrange
+set logscale y
+set xlabel 'inverse of accumulated $\tau$'
+set ylabel 'Relative Error Energy Density $\Delta E_{GS}$'
+# set xrange [0:500]
+# set yrange [exac-0.1:exac+0.1]
+# set logscale y
+
+plot for [typfile in typfiles] typfile u (1.0/$2):(abs($3-exac)/abs(exac)) w l title titlefn(typfile)
+
+do for [typ in inittypes] {
+    unset logscale y
+    unset xrange
+    set title target.typ noenhanced
+    typfiles = system("ls results/".target."/*/*/".typ."/energy.dat")
+    set xlabel 'TEBD steps'
+    set ylabel 'Energy Density $E_{GS}$'
+    # set xrange [0:500]
+    set yrange [floor(exac*10)/10.0:floor(exac*10)/10.0+0.1]
+
+    plot for [typfile in typfiles] typfile u 1:3 w l title titlefn(typfile), exac w l title "Exact"
+
+    set xrange [0:1]
+    unset yrange
+    set logscale y
+    set xlabel 'inverse of accumulated $\tau$'
+    set ylabel 'Relative Error Energy Density $\Delta E_{GS}$'
+    # set xrange [0:500]
+    # set yrange [exac-0.1:exac+0.1]
+    # set logscale y
+
+    plot for [typfile in typfiles] typfile u (1.0/$2):(abs($3-exac)/abs(exac)) w l title titlefn(typfile)
+}
 
 # set xlabel 'TEBD steps'
 # set ylabel 'Relative Error of Energy Density $\Delta E_{GS}$'
