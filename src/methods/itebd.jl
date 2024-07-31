@@ -86,7 +86,7 @@ function doiTEBD(
     date::String=string(Date(Dates.now())),
 )
     # directory setup
-    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType, '/' => '-'))" : "NoSymm")
+    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType, '/' => '-'))" : "/NoSymm")
     resultdir, snapshotdir = setupDir(date, target)
     mkpathINE("$(snapshotdir)/Corr")
     mkpathINE("$(snapshotdir)/Spec/BSU")
