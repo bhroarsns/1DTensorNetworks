@@ -4,9 +4,9 @@ using Distributed
     # ssname == "errv" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errv_$(opr["side"]).dat", "a"), (opr["step"], ", ")
     # ssname == "errΘ" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errΘ.dat", "a"), (opr["step"], ", ")
     # ssname == "errC" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errC.dat", "a"), (opr["step"], ", ")
-    ssname == "errU" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errU.dat", "a"), (opr["step"], ", ", opr["fs"], ", ")
+    # ssname == "errU" && return open("$(opr["snapshotdir"])/Err/$(opr["state"])/errU.dat", "a"), (opr["step"], ", ", opr["fs"], ", ")
     ssname == "spec" && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["bond"])_$(opr["side"])_$(opr["sector"]).dat", "a"), (opr["step"], ", ")
-    # ssname == "degenFP" && return open("$(opr["snapshotdir"])/Step/$(opr["step"])/$(opr["state"])/$(opr["bond"])_$(opr["side"])_degenFP.dat", "w"), ""
+    ssname == "degenFP" && return open("$(opr["snapshotdir"])/Step/$(opr["step"])/$(opr["state"])/$(opr["bond"])_$(opr["side"])_degenFP.dat", "w"), ""
     ssname == "corr" && return open("$(opr["snapshotdir"])/Corr/$(opr["pair"]).dat", "a"), (opr["step"], ", ")
     startswith(ssname, "uspec") && return open("$(opr["snapshotdir"])/Spec/$(opr["state"])/$(opr["fs"])_$(opr["bond"]).dat", "a"), (opr["step"], ", ")
     # if (opr["methodcall"] == "normalize!,") || (opr["methodcall"] == "update!,")
@@ -86,7 +86,7 @@ function doiTEBD(
     date::String=string(Date(Dates.now())),
 )
     # directory setup
-    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType, '/' => '-'))" : "")
+    target = "$(modelname)/iTEBD/mpslen=$(mpslen)/D=$(D)/seed=$(seed)/initΔτ=$(initΔτ)" * (!isempty(initType) ? "/$(replace(initType, '/' => '-'))" : "NoSymm")
     resultdir, snapshotdir = setupDir(date, target)
     mkpathINE("$(snapshotdir)/Corr")
     mkpathINE("$(snapshotdir)/Spec/BSU")
@@ -158,6 +158,7 @@ function doiTEBD(
                 @goto interuption
             end
             verbose && print("\r", curstep, ", ", Δτ)
+            print(logtime, curstep, ", ")
             opr["step"] = string(curstep)
 
             # bond hamiltonian update
@@ -167,14 +168,14 @@ function doiTEBD(
             # single site gate update (if exists)
             if !isnothing(sgate)
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/BSN")
-                print(logtime, (@elapsed normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel)), ", "); flush(logtime)
+                print(logtime, @elapsed(normalize!(mps; opr=merge(opr, Dict("state" => "BSN")), plevel)), ", ")
                 mkpathINE("$(snapshotdir)/Step/$(curstep)/FUU")
                 update!(mps, sgate, [originalinds[begin]]; opr=merge(opr, Dict("state" => "FUU")))
             end
 
             # canonicalization & normalization
             mkpathINE("$(snapshotdir)/Step/$(curstep)/FUN")
-            print(logtime, (@elapsed normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel)), ", "); flush(logtime)
+            print(logtime, @elapsed(normalize!(mps; opr=merge(opr, Dict("state" => "FUN")), plevel)), ", "); flush(logtime)
 
             # measurements
             correlation(mps; opr=merge(opr, Dict("state" => "FUN")))
