@@ -21,7 +21,7 @@ end
 
 for U in [10.0, 0.0, -10.0]
     for seed in [10, 20, 30]
-        for type in ["", "/TI", "/Mirror", "/MirrorTI", "/SII", "/PHS", "/PHESII"]
+        for type in ["/NoSymm", "/TI", "/Mirror", "/MirrorTI", "/SII", "/PHS", "/PHESII"]
             target = "2024-07-24/Hubbard/U=$(U)/iTEBD/mpslen=2/D=16/seed=$(seed)/initΔτ=0.1$(type)"
             println(target)
             printCorrLabel(target)
